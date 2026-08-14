@@ -10,6 +10,11 @@ from app.core.config import settings
 from app.core.database import Base
 from app.main import app
 
+if settings.test_db_name == settings.db_name:
+    raise RuntimeError(
+        "TEST_DB_NAME must be different from DB_NAME"
+    )
+
 
 TEST_DATABASE_URL = URL.create(
     drivername="postgresql+psycopg",
@@ -19,7 +24,6 @@ TEST_DATABASE_URL = URL.create(
     port=settings.db_port,
     database=settings.test_db_name,
 )
-
 
 test_engine = create_engine(
     TEST_DATABASE_URL,
