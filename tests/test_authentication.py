@@ -59,6 +59,8 @@ def test_login_success_returns_valid_token(
     assert payload["sub"] == str(user.id)
     assert "iat" in payload
     assert "exp" in payload
+    now_timestamp = int(datetime.now(timezone.utc).timestamp())
+    assert payload["exp"] > now_timestamp
     
 def test_login_wrong_password_returns_401(
     client,
