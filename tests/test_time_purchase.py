@@ -3,10 +3,12 @@ from sqlalchemy import select
 from uuid import uuid4
 from app.models.time_transaction import TimeTransaction
 from app.models.time_wallet import TimeWallet
+from sqlalchemy.exc import IntegrityError
 from app.services.time_wallet_service import (
     InvalidTimeAmountError,
     register_time_purchase,
 )
+
 
 def test_admin_can_credit_time_and_create_purchase_transaction(
     client,
@@ -376,3 +378,40 @@ def test_time_purchase_response_is_safe_for_admin_ui(
     assert "password" not in data
     assert "password_hash" not in data
     assert "actor_user_id" not in data
+
+def test_time_purchase_rolls_back_balance_if_ledger_insert_fails(
+    db_session,
+    user_factory,
+):
+    customer = user_factory(
+        username="cliente01",
+        available_seconds=1800,
+    )
+
+    invalid_actor_id = uuid4()
+
+    with pytest.raises(IntegrityError):
+        register_time_purchase(
+            db_session,
+            customer_id=customer.id,
+            seconds=3600,
+            actor_user_id=invalid_actor_id,
+        )
+
+    wallet = db_session.scalar(
+        select(TimeWallet).where(
+            TimeWallet.user_id == customer.id
+        )
+    )
+
+    assert wallet is not None
+    assert wallet.available_seconds == 1800
+    assert wallet.reserved_seconds == 0
+
+    transactions = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id == wallet.id
+        )
+    ).all()
+
+    assert transactions == []
