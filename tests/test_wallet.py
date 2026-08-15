@@ -20,6 +20,7 @@ def test_get_my_wallet_returns_current_customer_balance(
         "available_seconds": 7200,
         "reserved_seconds": 1800,
     }
+
     
 def test_get_my_wallet_does_not_return_another_customer_wallet(
     client,
@@ -49,6 +50,8 @@ def test_get_my_wallet_does_not_return_another_customer_wallet(
         "available_seconds": 3600,
         "reserved_seconds": 600,
     }
+
+    
 def test_get_my_wallet_does_not_expose_internal_fields(
     client,
     user_factory,
@@ -75,6 +78,7 @@ def test_get_my_wallet_does_not_expose_internal_fields(
     assert "id" not in data
     assert "user_id" not in data
     assert "updated_at" not in data
+
     
 def test_get_my_wallet_without_token_returns_401(
     client,
@@ -84,6 +88,7 @@ def test_get_my_wallet_without_token_returns_401(
     )
 
     assert response.status_code == 401
+
     
 def test_get_my_wallet_with_invalid_token_returns_401(
     client,
@@ -102,6 +107,7 @@ def test_get_my_wallet_with_invalid_token_returns_401(
     assert response.json() == {
         "detail": "Could not validate credentials"
     }
+
     
 def test_inactive_customer_cannot_get_wallet(
     client,
