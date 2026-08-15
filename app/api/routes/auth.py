@@ -2,10 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import (get_current_user,get_db)
 from app.core.security import create_access_token
 from app.schemas.auth import TokenResponse
-from app.schemas.user import UserRegister, UserResponse
+from app.schemas.user import (
+    CurrentUserResponse,
+    UserRegister,
+    UserResponse,
+)
+from app.models.user import User
 from app.services.auth_service import (
     InvalidCredentialsError,
     authenticate_user,
@@ -77,3 +82,14 @@ def login(
         access_token=access_token,
         token_type="bearer",
     )
+    
+@router.get(
+    "/me",
+    response_model=CurrentUserResponse,
+)
+def get_authenticated_user(
+    current_user: User = Depends(
+        get_current_user
+    ),
+):
+    return current_user
