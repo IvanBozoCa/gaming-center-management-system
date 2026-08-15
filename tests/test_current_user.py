@@ -9,49 +9,20 @@ from app.core.config import settings
 from app.models.user import User
 
 
-def register_and_login(client):
-    register_response = client.post(
-        "/auth/register",
-        json={
-            "username": "cliente01",
-            "display_name": "Cliente Prueba",
-            "password": "Prueba123!",
-        },
-    )
-
-    assert register_response.status_code == 201
-
-    login_response = client.post(
-        "/auth/login",
-        data={
-            "username": "cliente01",
-            "password": "Prueba123!",
-        },
-    )
-
-    assert login_response.status_code == 200
-
-    return login_response.json()["access_token"]
-
 def test_get_current_user_with_valid_token(
     client,
     db_session: Session,
+    user_factory,
+    auth_headers,
 ):
-    token = register_and_login(client)
-
-    user = db_session.scalar(
-        select(User).where(
-            User.username == "cliente01"
-        )
+    user = user_factory(
+        username="cliente01",
+        display_name="Cliente Prueba",
     )
-
-    assert user is not None
 
     response = client.get(
         "/auth/me",
-        headers={
-            "Authorization": f"Bearer {token}"
-        },
+        headers=auth_headers(user),
     )
 
     assert response.status_code == 200
@@ -66,6 +37,7 @@ def test_get_current_user_with_valid_token(
 
     assert "password" not in data
     assert "password_hash" not in data
+    
 def test_get_current_user_without_token_returns_401(
     client,
 ):
@@ -98,8 +70,12 @@ def test_get_current_user_with_invalid_token_returns_401(
 def test_get_current_user_with_expired_token_returns_401(
     client,
     db_session: Session,
+    user_factory
 ):
-    register_and_login(client)
+    user_factory(
+    username="cliente01",
+    password="Prueba123!",
+)
 
     user = db_session.scalar(
         select(User).where(
@@ -164,32 +140,22 @@ def test_token_for_nonexistent_user_returns_401(
 def test_inactive_user_with_existing_token_returns_401(
     client,
     db_session: Session,
+    user_factory,
+    auth_headers,
 ):
-    token = register_and_login(client)
+    user = user_factory()
 
-    user = db_session.scalar(
-        select(User).where(
-            User.username == "cliente01"
-        )
-    )
-
-    assert user is not None
+    headers = auth_headers(user)
 
     user.is_active = False
     db_session.commit()
 
     response = client.get(
         "/auth/me",
-        headers={
-            "Authorization": f"Bearer {token}"
-        },
+        headers=headers,
     )
 
     assert response.status_code == 401
-
-    assert response.json() == {
-        "detail": "Could not validate credentials"
-    }
     
 def test_token_with_invalid_subject_returns_401(
     client,

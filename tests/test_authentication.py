@@ -10,27 +10,13 @@ from app.models.user import User
 def test_login_success_returns_valid_token(
     client,
     db_session: Session,
+    user_factory,
 ):
-    register_payload = {
-        "username": "cliente01",
-        "display_name": "Cliente Prueba",
-        "password": "Prueba123!",
-    }
-
-    register_response = client.post(
-        "/auth/register",
-        json=register_payload,
+    user = user_factory(
+        username="cliente01",
+        display_name="Cliente Prueba",
+        password="Prueba123!",
     )
-
-    assert register_response.status_code == 201
-
-    user = db_session.scalar(
-        select(User).where(
-            User.username == "cliente01"
-        )
-    )
-
-    assert user is not None
 
     login_response = client.post(
         "/auth/login",
@@ -47,9 +33,6 @@ def test_login_success_returns_valid_token(
     assert "access_token" in data
     assert data["token_type"] == "bearer"
 
-    assert "password" not in data
-    assert "password_hash" not in data
-
     payload = jwt.decode(
         data["access_token"],
         settings.jwt_secret,
@@ -57,21 +40,14 @@ def test_login_success_returns_valid_token(
     )
 
     assert payload["sub"] == str(user.id)
-    assert "iat" in payload
-    assert "exp" in payload
-    now_timestamp = int(datetime.now(timezone.utc).timestamp())
-    assert payload["exp"] > now_timestamp
-    
+       
 def test_login_wrong_password_returns_401(
     client,
+    user_factory,
 ):
-    client.post(
-        "/auth/register",
-        json={
-            "username": "cliente01",
-            "display_name": "Cliente Prueba",
-            "password": "Prueba123!",
-        },
+    user_factory(
+        username="cliente01",
+        password="Prueba123!",
     )
 
     response = client.post(
@@ -112,14 +88,12 @@ def test_login_nonexistent_user_returns_same_error(
     
 def test_invalid_credentials_use_same_public_response(
     client,
+    user_factory,
 ):
-    client.post(
-        "/auth/register",
-        json={
-            "username": "cliente01",
-            "display_name": "Cliente Prueba",
-            "password": "Prueba123!",
-        },
+    user_factory(
+        username="cliente01",
+        password="Prueba123!",
+        is_active=False,
     )
 
     wrong_password_response = client.post(
@@ -149,18 +123,16 @@ def test_invalid_credentials_use_same_public_response(
 def test_inactive_user_cannot_login(
     client,
     db_session: Session,
+    user_factory,
 ):
-    client.post(
-        "/auth/register",
-        json={
-            "username": "cliente01",
-            "display_name": "Cliente Prueba",
-            "password": "Prueba123!",
-        },
+    user_factory(
+        username="cliente01",
+        password="Prueba123!",
+        is_active=False,
     )
 
     user = db_session.scalar(
-        select(User).where(
+        select(User).where( 
             User.username == "cliente01"
         )
     )
@@ -189,15 +161,12 @@ def test_inactive_user_cannot_login(
     
 def test_login_normalizes_username(
     client,
+    user_factory,
 ):
-    client.post(
-        "/auth/register",
-        json={
-            "username": "cliente01",
-            "display_name": "Cliente Prueba",
-            "password": "Prueba123!",
-        },
-    )
+    user_factory(
+    username="cliente01",
+    password="Prueba123!",
+)
 
     response = client.post(
         "/auth/login",

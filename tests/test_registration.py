@@ -5,7 +5,18 @@ from app.core.security import verify_password
 from app.models.time_wallet import TimeWallet
 from app.models.user import User
 
-def test_register_customer_success(client, db_session: Session):
+def test_register_customer_success(
+    client,
+    db_session: Session,
+    user_factory,
+    auth_headers,
+):
+    admin = user_factory(
+        username="admin",
+        display_name="Administrador",
+        role="ADMIN",
+    )
+
     payload = {
         "username": "cliente01",
         "display_name": "Cliente Prueba",
@@ -15,6 +26,7 @@ def test_register_customer_success(client, db_session: Session):
     response = client.post(
         "/auth/register",
         json=payload,
+        headers=auth_headers(admin),
     )
 
     assert response.status_code == 201
@@ -53,14 +65,20 @@ def test_register_customer_success(client, db_session: Session):
 
     assert wallet is not None
     assert wallet.available_seconds == 0
-    assert wallet.reserved_seconds == 0
+    assert wallet.reserved_seconds == 0    
     
-    
-
 def test_register_duplicate_username_returns_409(
     client,
     db_session: Session,
+    user_factory,
+    auth_headers,
 ):
+    admin = user_factory(
+        username="admin",
+        display_name="Administrador",
+        role="ADMIN",
+    )
+    
     payload = {
         "username": "cliente01",
         "display_name": "Cliente Prueba",
@@ -70,11 +88,13 @@ def test_register_duplicate_username_returns_409(
     first_response = client.post(
         "/auth/register",
         json=payload,
+        headers=auth_headers(admin),
     )
 
     second_response = client.post(
         "/auth/register",
         json=payload,
+        headers=auth_headers(admin),
     )
 
     assert first_response.status_code == 201
@@ -84,17 +104,26 @@ def test_register_duplicate_username_returns_409(
         "detail": "Username already registered"
     }
 
-    user_count = db_session.scalar(
-        select(func.count()).select_from(User)
-    )
-
-    assert user_count == 1
+    customer_count = db_session.scalar(
+    select(func.count())
+    .select_from(User)
+    .where(
+        User.role == "CUSTOMER"
+    ))   
+    assert customer_count == 1
     
 def test_register_invalid_data_does_not_persist(
     
     client,
     db_session: Session,
+    user_factory,
+    auth_headers,
 ):
+    admin = user_factory(
+        username="admin",
+        display_name="Administrador",
+        role="ADMIN",
+    )
     payload = {
         "username": "ab",
         "display_name": "X",
@@ -104,20 +133,32 @@ def test_register_invalid_data_does_not_persist(
     response = client.post(
         "/auth/register",
         json=payload,
+        headers=auth_headers(admin),
     )
 
     assert response.status_code == 422
 
-    user_count = db_session.scalar(
-        select(func.count()).select_from(User)
+    customer_count = db_session.scalar(
+    select(func.count())
+    .select_from(User)
+    .where(
+        User.role == "CUSTOMER"
     )
+)
 
-    assert user_count == 0
+    assert customer_count == 0
     
 def test_register_cannot_set_role(
     client,
     db_session: Session,
+    user_factory,
+    auth_headers,
 ):
+    admin = user_factory(
+        username="admin",
+        display_name="Administrador",
+        role="ADMIN",
+    )
     payload = {
         "username": "hacker",
         "display_name": "Prueba",
@@ -128,12 +169,16 @@ def test_register_cannot_set_role(
     response = client.post(
         "/auth/register",
         json=payload,
+        headers=auth_headers(admin),
     )
 
     assert response.status_code == 422
 
-    user_count = db_session.scalar(
-        select(func.count()).select_from(User)
+    customer_count = db_session.scalar(
+    select(func.count())
+    .select_from(User)
+    .where(
+        User.role == "CUSTOMER"
     )
-
-    assert user_count == 0
+)
+    assert customer_count == 0

@@ -4,7 +4,12 @@ from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 import app.models
-
+from app.core.security import (
+    create_access_token,
+    hash_password,
+)
+from app.models.time_wallet import TimeWallet
+from app.models.user import User
 from app.api.deps import get_db
 from app.core.config import settings
 from app.core.database import Base
@@ -63,3 +68,56 @@ def client(db_session: Session):
         yield test_client
 
     app.dependency_overrides.clear()
+    
+@pytest.fixture()
+def user_factory(
+    db_session: Session,
+):
+    def create_user(
+        username: str = "cliente01",
+        display_name: str = "Cliente Prueba",
+        password: str = "Prueba123!",
+        role: str = "CUSTOMER",
+        is_active: bool = True,
+    ) -> User:
+        user = User(
+            username=username,
+            display_name=display_name,
+            password_hash=hash_password(password),
+            role=role,
+            is_active=is_active,
+        )
+
+        db_session.add(user)
+
+        if role == "CUSTOMER":
+            wallet = TimeWallet(
+                user=user,
+                available_seconds=0,
+                reserved_seconds=0,
+            )
+
+            db_session.add(wallet)
+
+        db_session.commit()
+        db_session.refresh(user)
+
+        return user
+
+    return create_user
+
+
+@pytest.fixture()
+def auth_headers():
+    def build_headers(
+        user: User,
+    ) -> dict[str, str]:
+        token = create_access_token(
+            subject=str(user.id)
+        )
+
+        return {
+            "Authorization": f"Bearer {token}"
+        }
+
+    return build_headers
