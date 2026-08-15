@@ -18,6 +18,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.time_transaction import (
+        TimeTransaction,
+    )
     from app.models.user import User
 
 
@@ -72,3 +75,8 @@ class TimeWallet(Base):
     user: Mapped["User"] = relationship(
         back_populates="wallet",
     )
+    transactions: Mapped[
+        list["TimeTransaction"]
+    ] = relationship(
+        back_populates="wallet",
+    )       
