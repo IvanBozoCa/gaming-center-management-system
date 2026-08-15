@@ -79,6 +79,8 @@ def user_factory(
         password: str = "Prueba123!",
         role: str = "CUSTOMER",
         is_active: bool = True,
+        available_seconds: int = 0,
+        reserved_seconds: int = 0,
     ) -> User:
         user = User(
             username=username,
@@ -93,8 +95,8 @@ def user_factory(
         if role == "CUSTOMER":
             wallet = TimeWallet(
                 user=user,
-                available_seconds=0,
-                reserved_seconds=0,
+                available_seconds=available_seconds,
+                reserved_seconds=reserved_seconds,
             )
 
             db_session.add(wallet)
