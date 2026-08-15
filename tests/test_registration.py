@@ -105,11 +105,11 @@ def test_register_duplicate_username_returns_409(
     }
 
     customer_count = db_session.scalar(
-    select(func.count())
-    .select_from(User)
-    .where(
-        User.role == "CUSTOMER"
-    ))   
+        select(func.count())
+        .select_from(User)
+        .where(
+            User.role == "CUSTOMER"
+        ))   
     assert customer_count == 1
     
 def test_register_invalid_data_does_not_persist(
@@ -139,11 +139,11 @@ def test_register_invalid_data_does_not_persist(
     assert response.status_code == 422
 
     customer_count = db_session.scalar(
-    select(func.count())
-    .select_from(User)
-    .where(
-        User.role == "CUSTOMER"
-    )
+        select(func.count())
+        .select_from(User)
+        .where(
+            User.role == "CUSTOMER"
+        )
 )
 
     assert customer_count == 0
@@ -175,10 +175,10 @@ def test_register_cannot_set_role(
     assert response.status_code == 422
 
     customer_count = db_session.scalar(
-    select(func.count())
-    .select_from(User)
-    .where(
-        User.role == "CUSTOMER"
-    )
+        select(func.count())
+        .select_from(User)
+        .where(
+            User.role == "CUSTOMER"
+        )
 )
     assert customer_count == 0

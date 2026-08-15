@@ -40,6 +40,17 @@ def test_login_success_returns_valid_token(
     )
 
     assert payload["sub"] == str(user.id)
+    assert "password" not in data
+    assert "password_hash" not in data
+
+    assert "iat" in payload
+    assert "exp" in payload
+
+    now_timestamp = int(
+        datetime.now(timezone.utc).timestamp()
+    )
+
+    assert payload["exp"] > now_timestamp
        
 def test_login_wrong_password_returns_401(
     client,
@@ -93,7 +104,6 @@ def test_invalid_credentials_use_same_public_response(
     user_factory(
         username="cliente01",
         password="Prueba123!",
-        is_active=False,
     )
 
     wrong_password_response = client.post(
@@ -164,9 +174,9 @@ def test_login_normalizes_username(
     user_factory,
 ):
     user_factory(
-    username="cliente01",
-    password="Prueba123!",
-)
+        username="cliente01",
+        password="Prueba123!",
+    )
 
     response = client.post(
         "/auth/login",
