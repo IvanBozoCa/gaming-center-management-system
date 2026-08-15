@@ -48,3 +48,12 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+
+class CurrentUserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    username: str
+    display_name: str
+    role: str
+    is_active: bool
