@@ -2,7 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.api.deps import (get_current_user,get_db)
+from app.api.deps import (
+    get_current_user,
+    get_db,
+    require_admin,
+)
 from app.core.security import create_access_token
 from app.schemas.auth import TokenResponse
 from app.schemas.user import (
@@ -34,6 +38,7 @@ router = APIRouter(
 def register_customer(
     data: UserRegister,
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
 ):
     try:
         return create_customer(db, data)
