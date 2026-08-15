@@ -66,7 +66,15 @@ def test_get_current_user_with_valid_token(
 
     assert "password" not in data
     assert "password_hash" not in data
+def test_get_current_user_without_token_returns_401(
+    client,
+):
+    response = client.get(
+        "/auth/me"
+    )
 
+    assert response.status_code == 401
+    
 def test_get_current_user_with_invalid_token_returns_401(
     client,
 ):
