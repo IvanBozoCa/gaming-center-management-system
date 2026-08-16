@@ -5,6 +5,8 @@ from datetime import (
     timezone,
 )
 import pytest
+from threading import Event, Thread
+from sqlalchemy.orm import Session
 from sqlalchemy import (
     event,
     func,
@@ -2551,3 +2553,278 @@ def test_finish_uses_extended_authorized_time(
     )
 
     assert data["reserved_seconds"] == 0
+
+
+def test_extend_and_finish_are_serialized_by_session_lock(
+    db_session,
+    user_factory,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=9000,
+        elapsed_seconds=4500,
+    )
+
+    bind = db_session.get_bind()
+
+    extend_db = Session(
+        bind=bind,
+        autoflush=False,
+        expire_on_commit=False,
+    )
+
+    finish_db = Session(
+        bind=bind,
+        autoflush=False,
+        expire_on_commit=False,
+    )
+
+    extend_has_session_lock = Event()
+    allow_extend_to_continue = Event()
+    finish_attempted_session_lock = Event()
+
+    results = {}
+    errors = []
+
+    def after_cursor_execute(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ):
+        role = conn.info.get(
+            "session_concurrency_test_role"
+        )
+
+        normalized_statement = (
+            " ".join(
+                statement.upper().split()
+            )
+        )
+
+        if (
+            role == "extend"
+            and "FOR UPDATE"
+            in normalized_statement
+            and "USAGE_SESSIONS"
+            in normalized_statement
+        ):
+            extend_has_session_lock.set()
+
+            if not allow_extend_to_continue.wait(
+                timeout=5
+            ):
+                raise RuntimeError(
+                    "Timed out waiting to "
+                    "release extension lock"
+                )
+
+    def before_cursor_execute(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ):
+        role = conn.info.get(
+            "session_concurrency_test_role"
+        )
+
+        normalized_statement = (
+            " ".join(
+                statement.upper().split()
+            )
+        )
+
+        if (
+            role == "finish"
+            and "FOR UPDATE"
+            in normalized_statement
+            and "USAGE_SESSIONS"
+            in normalized_statement
+        ):
+            finish_attempted_session_lock.set()
+
+    def run_extension():
+        try:
+            connection = extend_db.connection()
+
+            connection.info[
+                "session_concurrency_test_role"
+            ] = "extend"
+
+            results["extend"] = (
+                extend_registered_customer_session(
+                    extend_db,
+                    session_id=usage_session.id,
+                    additional_seconds=1800,
+                    actor_user_id=admin.id,
+                )
+            )
+
+        except Exception as exc:
+            errors.append(exc)
+
+    def run_finish():
+        try:
+            connection = finish_db.connection()
+
+            connection.info[
+                "session_concurrency_test_role"
+            ] = "finish"
+
+            results["finish"] = (
+                finish_registered_customer_session(
+                    finish_db,
+                    session_id=usage_session.id,
+                    actor_user_id=admin.id,
+                )
+            )
+
+        except Exception as exc:
+            errors.append(exc)
+
+    event.listen(
+        bind,
+        "after_cursor_execute",
+        after_cursor_execute,
+    )
+
+    event.listen(
+        bind,
+        "before_cursor_execute",
+        before_cursor_execute,
+    )
+
+    extend_thread = Thread(
+        target=run_extension,
+        daemon=True,
+    )
+
+    finish_thread = Thread(
+        target=run_finish,
+        daemon=True,
+    )
+
+    try:
+        extend_thread.start()
+
+        assert extend_has_session_lock.wait(
+            timeout=5
+        )
+
+        finish_thread.start()
+
+        assert finish_attempted_session_lock.wait(
+            timeout=5
+        )
+
+        # FINISH ya intentó bloquear UsageSession,
+        # pero EXTEND todavía conserva el lock.
+        assert finish_thread.is_alive()
+
+        allow_extend_to_continue.set()
+
+        extend_thread.join(timeout=10)
+        finish_thread.join(timeout=10)
+
+    finally:
+        allow_extend_to_continue.set()
+
+        event.remove(
+            bind,
+            "after_cursor_execute",
+            after_cursor_execute,
+        )
+
+        event.remove(
+            bind,
+            "before_cursor_execute",
+            before_cursor_execute,
+        )
+
+        extend_thread.join(timeout=1)
+        finish_thread.join(timeout=1)
+
+        if not extend_thread.is_alive():
+            extend_db.close()
+
+        if not finish_thread.is_alive():
+            finish_db.close()
+
+    assert not extend_thread.is_alive()
+    assert not finish_thread.is_alive()
+
+    assert errors == []
+
+    extension_result = results["extend"]
+    finish_result = results["finish"]
+
+    assert (
+        extension_result.authorized_seconds
+        == 5400
+    )
+
+    assert (
+        finish_result.authorized_seconds
+        == 5400
+    )
+
+    assert (
+        3600
+        < finish_result.consumed_seconds
+        <= 5400
+    )
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    stored_station = db_session.get(
+        Station,
+        station.id,
+    )
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert stored_session is not None
+    assert stored_station is not None
+
+    assert stored_session.status == "FINISHED"
+    assert stored_session.authorized_seconds == 5400
+
+    assert stored_station.status == "AVAILABLE"
+
+    assert wallet.reserved_seconds == 0
+
+    assert wallet.available_seconds == (
+        9000
+        - stored_session.consumed_seconds
+    )
+
+    reserve_transactions = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id
+            == wallet.id,
+            TimeTransaction.transaction_type
+            == "SESSION_RESERVE",
+        )
+    ).all()
+
+    assert len(reserve_transactions) == 2
