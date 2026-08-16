@@ -14,6 +14,7 @@ from app.api.deps import (
 )
 from app.models.user import User
 from app.schemas.usage_session import (
+    ActiveSessionResponse,
     SessionFinishResponse,
     SessionStartCreate,
     SessionStartResponse,
@@ -35,6 +36,7 @@ from app.services.usage_session_service import (
     UsageSessionNotFoundError,
     finish_registered_customer_session,
     start_registered_customer_session,
+    list_active_registered_customer_sessions,
 )
 
 
@@ -189,3 +191,17 @@ def finish_session(
             status_code=status.HTTP_409_CONFLICT,
             detail="Session finish conflict",
         ) from exc
+        
+
+@router.get(
+    "/active",
+    response_model=list[ActiveSessionResponse],
+    status_code=status.HTTP_200_OK,
+)
+def list_active_sessions(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    return list_active_registered_customer_sessions(
+        db,
+    )
