@@ -53,6 +53,32 @@ class UsageSession(Base):
                 "status = 'ACTIVE'"
             ),
         ),
+        CheckConstraint(
+            """
+            consumed_seconds IS NULL
+            OR (
+                consumed_seconds >= 0
+                AND consumed_seconds <= authorized_seconds
+            )
+            """,
+            name="ck_usage_sessions_consumed_range",
+        ),
+        CheckConstraint(
+            """
+            (
+                status = 'ACTIVE'
+                AND ended_at IS NULL
+                AND consumed_seconds IS NULL
+            )
+            OR
+            (
+                status = 'FINISHED'
+                AND ended_at IS NOT NULL
+                AND consumed_seconds IS NOT NULL
+            )
+            """,
+            name="ck_usage_sessions_lifecycle",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -89,6 +115,10 @@ class UsageSession(Base):
     authorized_seconds: Mapped[int] = mapped_column(
         BigInteger,
         nullable=False,
+    )
+    consumed_seconds: Mapped[int | None] = mapped_column(
+        BigInteger,
+        nullable=True,
     )
 
     started_at: Mapped[datetime] = mapped_column(
