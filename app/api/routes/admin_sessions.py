@@ -4,6 +4,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     status,
 )
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from app.schemas.usage_session import (
     SessionFinishResponse,
     SessionStartCreate,
     SessionStartResponse,
+    FinishedSessionHistoryResponse,
 )
 from app.services.usage_session_service import (
     CustomerActiveSessionError,
@@ -42,6 +44,7 @@ from app.services.usage_session_service import (
     InvalidAdditionalTimeError,
     SessionExtensionConflictError,
     extend_registered_customer_session,
+    list_finished_registered_customer_sessions,
 )
 
 
@@ -210,7 +213,53 @@ def list_active_sessions(
     return list_active_registered_customer_sessions(
         db,
     )
-    
+
+
+@router.get(
+    "/history",
+    response_model=list[
+        FinishedSessionHistoryResponse
+    ],
+    status_code=status.HTTP_200_OK,
+    summary="Consultar historial de sesiones finalizadas",
+    description=(
+        "Devuelve únicamente sesiones FINISHED, "
+        "ordenadas desde el cierre más reciente al "
+        "más antiguo por ended_at DESC e id DESC. "
+        "Permite filtrar opcionalmente por cliente "
+        "y estación. La operación es exclusivamente "
+        "de lectura."
+    ),
+)
+def list_finished_sessions(
+    customer_id: UUID | None = Query(
+        default=None,
+    ),
+    station_id: UUID | None = Query(
+        default=None,
+    ),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+    ),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    return (
+        list_finished_registered_customer_sessions(
+            db,
+            customer_id=customer_id,
+            station_id=station_id,
+            limit=limit,
+            offset=offset,
+        )
+    )
+
 
 @router.post(
     "/{session_id}/extend",

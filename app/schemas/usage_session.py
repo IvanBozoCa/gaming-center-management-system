@@ -40,6 +40,7 @@ class SessionStartResponse(BaseModel):
     )
     station_status: Literal["IN_USE"]
     started_at: datetime
+
     
 class SessionFinishResponse(BaseModel):
     model_config = ConfigDict(
@@ -103,6 +104,34 @@ class ActiveSessionResponse(BaseModel):
         "RUNNING",
         "EXHAUSTED",
     ]
+
+
+class FinishedSessionHistoryResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    session_id: UUID
+
+    station_id: UUID
+    station_code: str
+
+    customer_id: UUID
+    customer_username: str
+    customer_display_name: str
+
+    authorized_seconds: int = Field(
+        gt=0,
+    )
+    consumed_seconds: int = Field(
+        ge=0,
+    )
+    released_seconds: int = Field(
+        ge=0,
+    )
+
+    started_at: datetime
+    ended_at: datetime
 
 
 class SessionExtensionCreate(BaseModel):
