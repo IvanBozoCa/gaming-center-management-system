@@ -15,6 +15,8 @@ from app.api.deps import (
 from app.models.user import User
 from app.schemas.usage_session import (
     ActiveSessionResponse,
+    SessionExtensionCreate,
+    SessionExtensionResponse,
     SessionFinishResponse,
     SessionStartCreate,
     SessionStartResponse,
@@ -37,6 +39,9 @@ from app.services.usage_session_service import (
     finish_registered_customer_session,
     start_registered_customer_session,
     list_active_registered_customer_sessions,
+    InvalidAdditionalTimeError,
+    SessionExtensionConflictError,
+    extend_registered_customer_session,
 )
 
 
@@ -205,3 +210,68 @@ def list_active_sessions(
     return list_active_registered_customer_sessions(
         db,
     )
+    
+
+@router.post(
+    "/{session_id}/extend",
+    response_model=SessionExtensionResponse,
+    status_code=status.HTTP_200_OK,
+)
+def extend_session(
+    session_id: UUID,
+    data: SessionExtensionCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    try:
+        return extend_registered_customer_session(
+            db,
+            session_id=session_id,
+            additional_seconds=(
+                data.additional_seconds
+            ),
+            actor_user_id=admin.id,
+        )
+
+    except InvalidAdditionalTimeError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_ENTITY
+            ),
+            detail=(
+                "Additional time must be "
+                "greater than zero"
+            ),
+        ) from exc
+
+    except UsageSessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usage session not found",
+        ) from exc
+
+    except UsageSessionAlreadyFinishedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Usage session is already finished"
+            ),
+        ) from exc
+
+    except SessionWalletNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer wallet not found",
+        ) from exc
+
+    except InsufficientTimeBalanceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Insufficient time balance",
+        ) from exc
+
+    except SessionExtensionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Session extension conflict",
+        ) from exc

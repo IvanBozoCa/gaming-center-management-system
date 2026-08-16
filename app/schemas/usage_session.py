@@ -99,3 +99,41 @@ class ActiveSessionResponse(BaseModel):
     remaining_seconds: int = Field(
         ge=0,
     )
+
+
+class SessionExtensionCreate(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    additional_seconds: int = Field(
+        gt=0,
+    )
+
+
+class SessionExtensionResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    session_id: UUID
+    station_id: UUID
+    customer_id: UUID
+
+    additional_seconds: int = Field(
+        gt=0,
+    )
+    authorized_seconds: int = Field(
+        gt=0,
+    )
+
+    available_seconds: int = Field(
+        ge=0,
+    )
+    reserved_seconds: int = Field(
+        ge=0,
+    )
+
+    session_status: Literal["ACTIVE"]
+
+    started_at: datetime
