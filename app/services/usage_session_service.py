@@ -301,6 +301,24 @@ class ActiveSessionResult:
     remaining_seconds: int
     time_state: str
  
+@dataclass(frozen=True)
+class FinishedSessionHistoryResult:
+    session_id: UUID
+
+    station_id: UUID
+    station_code: str
+
+    customer_id: UUID
+    customer_username: str
+    customer_display_name: str
+
+    authorized_seconds: int
+    consumed_seconds: int
+    released_seconds: int
+
+    started_at: datetime
+    ended_at: datetime
+ 
 def finish_registered_customer_session(
     db: Session,
     *,
@@ -697,3 +715,123 @@ def extend_registered_customer_session(
     except Exception:
         db.rollback()
         raise
+    
+    
+def list_finished_registered_customer_sessions(
+    db: Session,
+    *,
+    customer_id: UUID | None = None,
+    station_id: UUID | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[FinishedSessionHistoryResult]:
+    statement = (
+        select(
+            UsageSession,
+            Station.code,
+            User.username,
+            User.display_name,
+        )
+        .join(
+            Station,
+            Station.id
+            == UsageSession.station_id,
+        )
+        .join(
+            User,
+            User.id
+            == UsageSession.user_id,
+        )
+        .where(
+            UsageSession.status == "FINISHED"
+        )
+    )
+
+    if customer_id is not None:
+        statement = statement.where(
+            UsageSession.user_id
+            == customer_id
+        )
+
+    if station_id is not None:
+        statement = statement.where(
+            UsageSession.station_id
+            == station_id
+        )
+
+    statement = (
+        statement
+        .order_by(
+            UsageSession.ended_at.desc(),
+            UsageSession.id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+
+    rows = db.execute(statement).all()
+
+    results: list[
+        FinishedSessionHistoryResult
+    ] = []
+
+    for (
+        usage_session,
+        station_code,
+        customer_username,
+        customer_display_name,
+    ) in rows:
+        consumed_seconds = (
+            usage_session.consumed_seconds
+        )
+
+        ended_at = usage_session.ended_at
+
+        if (
+            consumed_seconds is None
+            or ended_at is None
+        ):
+            continue
+
+        released_seconds = (
+            usage_session.authorized_seconds
+            - consumed_seconds
+        )
+
+        results.append(
+            FinishedSessionHistoryResult(
+                session_id=usage_session.id,
+
+                station_id=(
+                    usage_session.station_id
+                ),
+                station_code=station_code,
+
+                customer_id=(
+                    usage_session.user_id
+                ),
+                customer_username=(
+                    customer_username
+                ),
+                customer_display_name=(
+                    customer_display_name
+                ),
+
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                ),
+                consumed_seconds=(
+                    consumed_seconds
+                ),
+                released_seconds=(
+                    released_seconds
+                ),
+
+                started_at=(
+                    usage_session.started_at
+                ),
+                ended_at=ended_at,
+            )
+        )
+
+    return results
