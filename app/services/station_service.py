@@ -1,8 +1,17 @@
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
+from uuid import UUID
 from app.models.station import Station
+from app.models.usage_session import UsageSession
+
+ADMIN_MANAGED_STATION_STATUSES = frozenset(
+    {
+        "AVAILABLE",
+        "MAINTENANCE",
+        "OFFLINE",
+    }
+)
 
 
 class InvalidStationCodeError(Exception):
@@ -10,6 +19,18 @@ class InvalidStationCodeError(Exception):
 
 
 class StationAlreadyExistsError(Exception):
+    pass
+
+
+class StationNotFoundError(Exception):
+    pass
+
+
+class InvalidStationStatusError(Exception):
+    pass
+
+
+class StationInUseError(Exception):
     pass
 
 
@@ -78,3 +99,61 @@ def list_stations(
             )
         ).all()
     )
+
+
+def update_station_status(
+    db: Session,
+    *,
+    station_id: UUID,
+    status: str,
+) -> Station:
+    if status not in (
+        ADMIN_MANAGED_STATION_STATUSES
+    ):
+        raise InvalidStationStatusError
+
+    try:
+        station = db.scalar(
+            select(Station)
+            .where(
+                Station.id == station_id
+            )
+            .with_for_update()
+        )
+
+        if station is None:
+            raise StationNotFoundError
+
+        active_session_id = db.scalar(
+            select(UsageSession.id)
+            .where(
+                UsageSession.station_id
+                == station.id,
+                UsageSession.status
+                == "ACTIVE",
+            )
+            .limit(1)
+        )
+
+        if (
+            station.status == "IN_USE"
+            or active_session_id is not None
+        ):
+            raise StationInUseError
+
+        if station.status == status:
+            db.commit()
+            db.refresh(station)
+
+            return station
+
+        station.status = status
+
+        db.commit()
+        db.refresh(station)
+
+        return station
+
+    except Exception:
+        db.rollback()
+        raise
