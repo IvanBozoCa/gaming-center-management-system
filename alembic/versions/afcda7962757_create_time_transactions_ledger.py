@@ -28,7 +28,7 @@ def upgrade() -> None:
     sa.Column('available_seconds_delta', sa.BigInteger(), nullable=False),
     sa.Column('reserved_seconds_delta', sa.BigInteger(), nullable=False),
     sa.Column('actor_user_id', sa.Uuid(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text("clock_timestamp()"), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.CheckConstraint("\n            transaction_type IN (\n                'PURCHASE',\n                'SESSION_RESERVE',\n                'SESSION_USAGE',\n                'SESSION_RELEASE',\n                'BONUS',\n                'ADJUSTMENT',\n                'REFUND'\n            )\n            ", name='ck_time_transactions_type'),
     sa.CheckConstraint('\n            available_seconds_delta <> 0\n            OR reserved_seconds_delta <> 0\n            ', name='ck_time_transactions_non_zero_delta'),
     sa.ForeignKeyConstraint(['actor_user_id'], ['users.id'], ondelete='SET NULL'),

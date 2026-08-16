@@ -27,7 +27,7 @@ def upgrade() -> None:
     sa.Column('user_id', sa.Uuid(), nullable=False),
     sa.Column('status', sa.String(length=20), server_default=sa.text("'ACTIVE'"), nullable=False),
     sa.Column('authorized_seconds', sa.BigInteger(), nullable=False),
-    sa.Column('started_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('started_at', sa.DateTime(timezone=True), server_default=sa.text('clock_timestamp()'), nullable=False),
     sa.Column('ended_at', sa.DateTime(timezone=True), nullable=True),
     sa.CheckConstraint("\n            status IN (\n                'ACTIVE',\n                'FINISHED'\n            )\n            ", name='ck_usage_sessions_status'),
     sa.CheckConstraint('authorized_seconds > 0', name='ck_usage_sessions_authorized_positive'),
