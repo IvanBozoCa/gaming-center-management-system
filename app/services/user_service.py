@@ -1,4 +1,7 @@
-from sqlalchemy import select
+from dataclasses import dataclass
+from datetime import datetime
+from uuid import UUID
+from sqlalchemy import select, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,6 +17,17 @@ class UsernameAlreadyExistsError(Exception):
 
 class RegistrationConflictError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class AdminCustomerSummaryResult:
+    id: UUID
+    username: str
+    display_name: str
+    is_active: bool
+    created_at: datetime
+    available_seconds: int
+    reserved_seconds: int
 
 
 def create_customer(
@@ -58,3 +72,88 @@ def create_customer(
     db.refresh(user)
 
     return user
+
+
+def list_admin_customers(
+    db: Session,
+    *,
+    query: str | None = None,
+    is_active: bool | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[AdminCustomerSummaryResult]:
+    normalized_query = (
+        query.strip()
+        if query is not None
+        else None
+    )
+
+    statement = (
+        select(
+            User,
+            TimeWallet.available_seconds,
+            TimeWallet.reserved_seconds,
+        )
+        .join(
+            TimeWallet,
+            TimeWallet.user_id == User.id,
+        )
+        .where(
+            User.role == "CUSTOMER"
+        )
+    )
+
+    if normalized_query:
+        search_pattern = (
+            f"%{normalized_query}%"
+        )
+
+        statement = statement.where(
+            or_(
+                User.username.ilike(
+                    search_pattern
+                ),
+                User.display_name.ilike(
+                    search_pattern
+                ),
+            )
+        )
+
+    if is_active is not None:
+        statement = statement.where(
+            User.is_active.is_(is_active)
+        )
+
+    statement = (
+        statement
+        .order_by(
+            User.display_name.asc(),
+            User.username.asc(),
+            User.id.asc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+
+    rows = db.execute(statement).all()
+
+    return [
+        AdminCustomerSummaryResult(
+            id=user.id,
+            username=user.username,
+            display_name=user.display_name,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            available_seconds=(
+                available_seconds
+            ),
+            reserved_seconds=(
+                reserved_seconds
+            ),
+        )
+        for (
+            user,
+            available_seconds,
+            reserved_seconds,
+        ) in rows
+    ]
