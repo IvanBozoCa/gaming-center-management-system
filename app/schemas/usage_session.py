@@ -99,6 +99,10 @@ class ActiveSessionResponse(BaseModel):
     remaining_seconds: int = Field(
         ge=0,
     )
+    time_state: Literal[
+        "RUNNING",
+        "EXHAUSTED",
+    ]
 
 
 class SessionExtensionCreate(BaseModel):
