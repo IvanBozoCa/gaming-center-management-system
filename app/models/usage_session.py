@@ -94,7 +94,7 @@ class UsageSession(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=func.now(),
+        server_default=func.clock_timestamp(),
     )
 
     ended_at: Mapped[datetime | None] = mapped_column(

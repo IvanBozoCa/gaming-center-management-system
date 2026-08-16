@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.models.station import Station
@@ -897,3 +897,45 @@ def test_session_start_rolls_back_everything_if_ledger_insert_fails(
     ).all()
 
     assert transactions == []
+    
+    
+def test_session_started_at_uses_actual_insert_time(
+    db_session,
+    user_factory,
+):
+    customer = user_factory(
+        username="cliente01",
+    )
+
+    station = _create_station(
+        db_session,
+    )
+
+    transaction_started_at = db_session.scalar(
+        select(
+            func.transaction_timestamp()
+        )
+    )
+
+    db_session.execute(
+        select(
+            func.pg_sleep(0.05)
+        )
+    )
+
+    usage_session = UsageSession(
+        station_id=station.id,
+        user_id=customer.id,
+        status="ACTIVE",
+        authorized_seconds=1800,
+    )
+
+    db_session.add(usage_session)
+    db_session.flush()
+    db_session.refresh(usage_session)
+
+    assert usage_session.started_at > (
+        transaction_started_at
+    )
+
+    db_session.rollback()
