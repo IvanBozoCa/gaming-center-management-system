@@ -16,6 +16,11 @@ StationStatus = Literal[
     "OFFLINE",
 ]
 
+AdminStationStatus = Literal[
+    "AVAILABLE",
+    "MAINTENANCE",
+    "OFFLINE",
+]
 
 class StationCreate(BaseModel):
     model_config = ConfigDict(
@@ -26,6 +31,13 @@ class StationCreate(BaseModel):
         min_length=1,
         max_length=50,
     )
+    
+class StationStatusUpdate(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+
+    status: AdminStationStatus
 
 
 class StationResponse(BaseModel):
