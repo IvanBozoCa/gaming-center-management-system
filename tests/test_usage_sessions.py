@@ -1,5 +1,5 @@
 from uuid import uuid4
-
+from datetime import timedelta
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -9,7 +9,9 @@ from app.models.time_transaction import TimeTransaction
 from app.models.time_wallet import TimeWallet
 from app.models.usage_session import UsageSession
 from app.services.usage_session_service import (
+    SessionFinishConflictError,
     SessionStartConflictError,
+    finish_registered_customer_session,
     start_registered_customer_session,
 )
 
@@ -46,6 +48,73 @@ def _get_wallet(
     assert wallet is not None
 
     return wallet
+
+
+def _prepare_active_session(
+    db_session,
+    user_factory,
+    *,
+    authorized_seconds: int = 3600,
+    available_seconds: int = 7200,
+    elapsed_seconds: int = 900,
+):
+    admin = user_factory(
+        username="admin01",
+        role="ADMIN",
+    )
+
+    customer = user_factory(
+        username="cliente01",
+        available_seconds=available_seconds,
+    )
+
+    station = _create_station(
+        db_session,
+    )
+
+    start_result = (
+        start_registered_customer_session(
+            db_session,
+            station_id=station.id,
+            customer_id=customer.id,
+            authorized_seconds=(
+                authorized_seconds
+            ),
+            actor_user_id=admin.id,
+        )
+    )
+
+    usage_session = db_session.get(
+        UsageSession,
+        start_result.session_id,
+    )
+
+    assert usage_session is not None
+
+    database_now = db_session.scalar(
+        select(
+            func.clock_timestamp()
+        )
+    )
+
+    assert database_now is not None
+
+    usage_session.started_at = (
+        database_now
+        - timedelta(
+            seconds=elapsed_seconds
+        )
+    )
+
+    db_session.commit()
+    db_session.refresh(usage_session)
+
+    return (
+        admin,
+        customer,
+        station,
+        usage_session,
+    )
 
 
 def test_admin_can_start_registered_customer_session(
@@ -939,3 +1008,476 @@ def test_session_started_at_uses_actual_insert_time(
     )
 
     db_session.rollback()
+    
+def test_admin_can_finish_session_with_partial_usage(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+        elapsed_seconds=900,
+    )
+
+    response = client.post(
+        (
+            f"/admin/sessions/"
+            f"{usage_session.id}/finish"
+        ),
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    consumed = data["consumed_seconds"]
+    released = data["released_seconds"]
+
+    assert 900 <= consumed <= 905
+
+    assert released == (
+        3600 - consumed
+    )
+
+    assert data["authorized_seconds"] == 3600
+    assert data["available_seconds"] == (
+        7200 - consumed
+    )
+    assert data["reserved_seconds"] == 0
+
+    assert data["session_status"] == "FINISHED"
+    assert data["station_status"] == "AVAILABLE"
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    assert stored_session is not None
+    assert stored_session.status == "FINISHED"
+    assert (
+        stored_session.consumed_seconds
+        == consumed
+    )
+    assert stored_session.ended_at is not None
+
+    stored_station = db_session.get(
+        Station,
+        station.id,
+    )
+
+    assert stored_station is not None
+    assert stored_station.status == "AVAILABLE"
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert wallet.available_seconds == (
+        7200 - consumed
+    )
+    assert wallet.reserved_seconds == 0
+
+    transactions = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id
+            == wallet.id
+        )
+    ).all()
+
+    transaction_by_type = {
+        transaction.transaction_type:
+        transaction
+        for transaction in transactions
+    }
+
+    assert set(
+        transaction_by_type
+    ) == {
+        "SESSION_RESERVE",
+        "SESSION_USAGE",
+        "SESSION_RELEASE",
+    }
+
+    usage_transaction = (
+        transaction_by_type[
+            "SESSION_USAGE"
+        ]
+    )
+
+    assert (
+        usage_transaction.available_seconds_delta
+        == 0
+    )
+    assert (
+        usage_transaction.reserved_seconds_delta
+        == -consumed
+    )
+
+    release_transaction = (
+        transaction_by_type[
+            "SESSION_RELEASE"
+        ]
+    )
+
+    assert (
+        release_transaction.available_seconds_delta
+        == released
+    )
+    assert (
+        release_transaction.reserved_seconds_delta
+        == -released
+    )
+
+
+def test_session_consumption_is_capped_at_authorized_time(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=60,
+        available_seconds=3600,
+        elapsed_seconds=120,
+    )
+
+    response = client.post(
+        (
+            f"/admin/sessions/"
+            f"{usage_session.id}/finish"
+        ),
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["authorized_seconds"] == 60
+    assert data["consumed_seconds"] == 60
+    assert data["released_seconds"] == 0
+    assert data["available_seconds"] == 3540
+    assert data["reserved_seconds"] == 0
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    transactions = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id
+            == wallet.id
+        )
+    ).all()
+
+    transaction_types = {
+        transaction.transaction_type
+        for transaction in transactions
+    }
+
+    assert "SESSION_USAGE" in transaction_types
+    assert "SESSION_RELEASE" not in transaction_types
+
+
+def test_session_consumption_never_becomes_negative(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=60,
+        available_seconds=3600,
+        elapsed_seconds=-60,
+    )
+
+    response = client.post(
+        (
+            f"/admin/sessions/"
+            f"{usage_session.id}/finish"
+        ),
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["consumed_seconds"] == 0
+    assert data["released_seconds"] == 60
+
+    assert data["available_seconds"] == 3600
+    assert data["reserved_seconds"] == 0
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    transactions = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id
+            == wallet.id
+        )
+    ).all()
+
+    transaction_types = {
+        transaction.transaction_type
+        for transaction in transactions
+    }
+
+    assert "SESSION_RELEASE" in transaction_types
+    assert "SESSION_USAGE" not in transaction_types
+
+
+def test_customer_cannot_finish_session(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+    )
+
+    response = client.post(
+        (
+            f"/admin/sessions/"
+            f"{usage_session.id}/finish"
+        ),
+        headers=auth_headers(customer),
+    )
+
+    assert response.status_code == 403
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    assert stored_session is not None
+    assert stored_session.status == "ACTIVE"
+
+    stored_station = db_session.get(
+        Station,
+        station.id,
+    )
+
+    assert stored_station is not None
+    assert stored_station.status == "IN_USE"
+
+
+def test_unknown_session_finish_returns_404(
+    client,
+    user_factory,
+    auth_headers,
+):
+    admin = user_factory(
+        username="admin01",
+        role="ADMIN",
+    )
+
+    response = client.post(
+        (
+            f"/admin/sessions/"
+            f"{uuid4()}/finish"
+        ),
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 404
+
+    assert response.json() == {
+        "detail": "Usage session not found"
+    }
+
+
+def test_finished_session_cannot_be_settled_twice(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+        elapsed_seconds=900,
+    )
+
+    first_response = client.post(
+        (
+            f"/admin/sessions/"
+            f"{usage_session.id}/finish"
+        ),
+        headers=auth_headers(admin),
+    )
+
+    assert first_response.status_code == 200
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    transaction_count_before = len(
+        db_session.scalars(
+            select(TimeTransaction).where(
+                TimeTransaction.wallet_id
+                == wallet.id
+            )
+        ).all()
+    )
+
+    second_response = client.post(
+        (
+            f"/admin/sessions/"
+            f"{usage_session.id}/finish"
+        ),
+        headers=auth_headers(admin),
+    )
+
+    assert second_response.status_code == 409
+
+    assert second_response.json() == {
+        "detail": (
+            "Usage session is already finished"
+        )
+    }
+
+    db_session.expire_all()
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    transaction_count_after = len(
+        db_session.scalars(
+            select(TimeTransaction).where(
+                TimeTransaction.wallet_id
+                == wallet.id
+            )
+        ).all()
+    )
+
+    assert (
+        transaction_count_after
+        == transaction_count_before
+    )
+
+    assert wallet.reserved_seconds == 0
+
+
+def test_session_finish_rolls_back_everything_if_ledger_fails(
+    db_session,
+    user_factory,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+        elapsed_seconds=900,
+    )
+
+    invalid_actor_id = uuid4()
+
+    with pytest.raises(
+        SessionFinishConflictError
+    ):
+        finish_registered_customer_session(
+            db_session,
+            session_id=usage_session.id,
+            actor_user_id=invalid_actor_id,
+        )
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    assert stored_session is not None
+    assert stored_session.status == "ACTIVE"
+    assert stored_session.consumed_seconds is None
+    assert stored_session.ended_at is None
+
+    stored_station = db_session.get(
+        Station,
+        station.id,
+    )
+
+    assert stored_station is not None
+    assert stored_station.status == "IN_USE"
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert wallet.available_seconds == 3600
+    assert wallet.reserved_seconds == 3600
+
+    transactions = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id
+            == wallet.id
+        )
+    ).all()
+
+    assert len(transactions) == 1
+
+    assert (
+        transactions[0].transaction_type
+        == "SESSION_RESERVE"
+    )
