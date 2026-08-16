@@ -1,9 +1,11 @@
 from fastapi import (
     APIRouter,
     Depends,
+    HTTPException,
     Query,
     status,
 )
+from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -17,7 +19,18 @@ from app.schemas.admin_customer import (
 from app.services.user_service import (
     list_admin_customers,
 )
-
+from app.schemas.time_transaction import (
+    TimeTransactionResponse,
+)
+from app.schemas.time_wallet import (
+    TimeWalletResponse,
+)
+from app.services.time_wallet_service import (
+    CustomerNotFoundError,
+    CustomerWalletNotFoundError,
+    get_admin_customer_wallet,
+    list_admin_customer_time_transactions,
+)
 
 router = APIRouter(
     prefix="/admin/customers",
@@ -59,3 +72,76 @@ def get_customers(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get(
+    "/{customer_id}/wallet",
+    response_model=TimeWalletResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_customer_wallet(
+    customer_id: UUID,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    try:
+        return get_admin_customer_wallet(
+            db,
+            customer_id=customer_id,
+        )
+
+    except CustomerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found",
+        ) from exc
+
+    except CustomerWalletNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer wallet not found",
+        ) from exc
+    
+    
+@router.get(
+    "/{customer_id}/time-transactions",
+    response_model=list[
+        TimeTransactionResponse
+    ],
+    status_code=status.HTTP_200_OK,
+)
+def get_customer_time_transactions(
+    customer_id: UUID,
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+    ),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    try:
+        return (
+            list_admin_customer_time_transactions(
+                db,
+                customer_id=customer_id,
+                limit=limit,
+                offset=offset,
+            )
+        )
+
+    except CustomerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found",
+        ) from exc
+
+    except CustomerWalletNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer wallet not found",
+        ) from exc
