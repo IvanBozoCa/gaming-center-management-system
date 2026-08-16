@@ -258,13 +258,12 @@ def finish_registered_customer_session(
     actor_user_id: UUID,
 ) -> SessionFinishResult:
     try:
-        session_snapshot = db.scalar(
-            select(UsageSession).where(
+        session_station_id = db.scalar(
+            select(UsageSession.station_id).where(
                 UsageSession.id == session_id
-            )
-        )
+        ))
 
-        if session_snapshot is None:
+        if session_station_id is None:
             raise UsageSessionNotFoundError
         
         ended_at = db.scalar(
@@ -279,8 +278,7 @@ def finish_registered_customer_session(
         station = db.scalar(
             select(Station)
             .where(
-                Station.id
-                == session_snapshot.station_id
+                Station.id == session_station_id
             )
             .with_for_update()
         )
