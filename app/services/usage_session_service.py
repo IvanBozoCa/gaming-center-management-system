@@ -266,7 +266,16 @@ def finish_registered_customer_session(
 
         if session_snapshot is None:
             raise UsageSessionNotFoundError
-
+        
+        ended_at = db.scalar(
+                    select(
+                        func.clock_timestamp()
+                    )
+                )
+        
+        if ended_at is None:
+                    raise SessionFinishConflictError
+        
         station = db.scalar(
             select(Station)
             .where(
@@ -311,15 +320,7 @@ def finish_registered_customer_session(
         ):
             raise SessionReservationMismatchError
 
-        ended_at = db.scalar(
-            select(
-                func.clock_timestamp()
-            )
-        )
-
-        if ended_at is None:
-            raise SessionFinishConflictError
-
+        
         elapsed_seconds = int(
             (
                 ended_at

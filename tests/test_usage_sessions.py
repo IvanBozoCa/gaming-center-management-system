@@ -1,9 +1,13 @@
 from uuid import uuid4
 from datetime import timedelta
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import (
+    event,
+    func,
+    select,
+)
 from sqlalchemy.exc import IntegrityError
-
+import time
 from app.models.station import Station
 from app.models.time_transaction import TimeTransaction
 from app.models.time_wallet import TimeWallet
@@ -1480,4 +1484,80 @@ def test_session_finish_rolls_back_everything_if_ledger_fails(
     assert (
         transactions[0].transaction_type
         == "SESSION_RESERVE"
+    )
+    
+def test_finish_timestamp_is_captured_before_lock_waits(
+    db_session,
+    user_factory,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=60,
+        available_seconds=3600,
+        elapsed_seconds=10,
+    )
+
+    bind = db_session.get_bind()
+
+    delayed_lock_queries = 0
+
+    def delay_for_update(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ):
+        nonlocal delayed_lock_queries
+
+        if "FOR UPDATE" in statement.upper():
+            delayed_lock_queries += 1
+            time.sleep(0.05)
+
+    event.listen(
+        bind,
+        "before_cursor_execute",
+        delay_for_update,
+    )
+
+    try:
+        result = (
+            finish_registered_customer_session(
+                db_session,
+                session_id=usage_session.id,
+                actor_user_id=admin.id,
+            )
+        )
+    finally:
+        event.remove(
+            bind,
+            "before_cursor_execute",
+            delay_for_update,
+        )
+
+    database_now = db_session.scalar(
+        select(
+            func.clock_timestamp()
+        )
+    )
+
+    assert database_now is not None
+
+    assert delayed_lock_queries >= 3
+
+    elapsed_after_finish_timestamp = (
+        database_now
+        - result.ended_at
+    ).total_seconds()
+
+    assert (
+        elapsed_after_finish_timestamp
+        >= 0.10
     )
