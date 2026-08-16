@@ -1688,6 +1688,7 @@ def test_admin_can_list_active_session_with_remaining_time(
 
     assert 900 <= elapsed <= 905
     assert remaining == 3600 - elapsed
+    assert active_session["time_state"] == "RUNNING"
 
 
 def test_expired_active_session_reports_zero_remaining_time(
@@ -1722,6 +1723,7 @@ def test_expired_active_session_reports_zero_remaining_time(
 
     assert data[0]["elapsed_seconds"] == 60
     assert data[0]["remaining_seconds"] == 0
+    assert data[0]["time_state"] == "EXHAUSTED"
 
     db_session.expire_all()
 
@@ -1750,6 +1752,20 @@ def test_expired_active_session_reports_zero_remaining_time(
 
     assert wallet.available_seconds == 3540
     assert wallet.reserved_seconds == 60
+    
+    transactions = db_session.scalars(
+    select(TimeTransaction).where(
+        TimeTransaction.wallet_id
+        == wallet.id
+        )
+    ).all()
+
+    assert len(transactions) == 1
+
+    assert (
+        transactions[0].transaction_type
+        == "SESSION_RESERVE"
+    )
 
 
 def test_finished_sessions_are_excluded_from_active_list(
@@ -2828,3 +2844,113 @@ def test_extend_and_finish_are_serialized_by_session_lock(
     ).all()
 
     assert len(reserve_transactions) == 2
+
+
+def test_exhausted_session_returns_to_running_after_extension(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=60,
+        available_seconds=3600,
+        elapsed_seconds=120,
+    )
+
+    started_at_before = (
+        usage_session.started_at
+    )
+
+    exhausted_response = client.get(
+        "/admin/sessions/active",
+        headers=auth_headers(admin),
+    )
+
+    assert exhausted_response.status_code == 200
+
+    exhausted_data = (
+        exhausted_response.json()[0]
+    )
+
+    assert (
+        exhausted_data["remaining_seconds"]
+        == 0
+    )
+    assert (
+        exhausted_data["time_state"]
+        == "EXHAUSTED"
+    )
+
+    extend_response = client.post(
+        (
+            f"/admin/sessions/"
+            f"{usage_session.id}/extend"
+        ),
+        json={
+            "additional_seconds": 600,
+        },
+        headers=auth_headers(admin),
+    )
+
+    assert extend_response.status_code == 200
+    assert (
+        extend_response.json()[
+            "authorized_seconds"
+        ]
+        == 660
+    )
+
+    running_response = client.get(
+        "/admin/sessions/active",
+        headers=auth_headers(admin),
+    )
+
+    assert running_response.status_code == 200
+
+    running_data = (
+        running_response.json()[0]
+    )
+
+    assert (
+        running_data["time_state"]
+        == "RUNNING"
+    )
+    assert (
+        running_data["remaining_seconds"]
+        > 0
+    )
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    stored_station = db_session.get(
+        Station,
+        station.id,
+    )
+
+    assert stored_session is not None
+    assert stored_station is not None
+
+    assert stored_session.status == "ACTIVE"
+    assert (
+        stored_session.authorized_seconds
+        == 660
+    )
+    assert (
+        stored_session.started_at
+        == started_at_before
+    )
+
+    assert stored_station.status == "IN_USE"
