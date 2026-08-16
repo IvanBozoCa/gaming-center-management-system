@@ -1,3 +1,4 @@
+from app.models.usage_session import UsageSession
 from app.models.time_transaction import (
     TimeTransaction,
 )
@@ -10,4 +11,5 @@ __all__ = [
     "TimeWallet",
     "TimeTransaction",
     "Station",
+    "UsageSession",
 ]
