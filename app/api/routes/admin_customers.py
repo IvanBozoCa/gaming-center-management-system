@@ -78,6 +78,12 @@ def get_customers(
     "/{customer_id}/wallet",
     response_model=TimeWalletResponse,
     status_code=status.HTTP_200_OK,
+    summary="Consultar saldo de tiempo de un cliente",
+    description=(
+    "Devuelve el saldo actual de tiempo disponible "
+    "y reservado del cliente, expresado en segundos. "
+    "La operación es exclusivamente de lectura."
+),
 )
 def get_customer_wallet(
     customer_id: UUID,
@@ -109,6 +115,16 @@ def get_customer_wallet(
         TimeTransactionResponse
     ],
     status_code=status.HTTP_200_OK,
+    summary="Consultar historial de tiempo de un cliente",
+    description=(
+        "Devuelve los movimientos del ledger de tiempo "
+        "del cliente, ordenados desde el más reciente "
+        "al más antiguo por created_at DESC e id DESC. "
+        "Los campos available_seconds_delta y "
+        "reserved_seconds_delta representan segundos "
+        "de tiempo y no valores monetarios. "
+        "La operación es exclusivamente de lectura."
+    ),
 )
 def get_customer_time_transactions(
     customer_id: UUID,
