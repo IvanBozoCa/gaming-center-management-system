@@ -1561,3 +1561,414 @@ def test_finish_timestamp_is_captured_before_lock_waits(
         elapsed_after_finish_timestamp
         >= 0.10
     )
+    
+
+def test_admin_gets_empty_active_sessions_list(
+    client,
+    user_factory,
+    auth_headers,
+):
+    admin = user_factory(
+        username="admin01",
+        role="ADMIN",
+    )
+
+    response = client.get(
+        "/admin/sessions/active",
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+    
+
+def test_customer_cannot_list_active_sessions(
+    client,
+    user_factory,
+    auth_headers,
+):
+    customer = user_factory(
+        username="cliente01",
+    )
+
+    response = client.get(
+        "/admin/sessions/active",
+        headers=auth_headers(customer),
+    )
+
+    assert response.status_code == 403
+
+
+def test_active_sessions_requires_authentication(
+    client,
+):
+    response = client.get(
+        "/admin/sessions/active",
+    )
+
+    assert response.status_code == 401
+
+
+def test_admin_can_list_active_session_with_remaining_time(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+        elapsed_seconds=900,
+    )
+
+    response = client.get(
+        "/admin/sessions/active",
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert len(data) == 1
+
+    active_session = data[0]
+
+    assert active_session["session_id"] == str(
+        usage_session.id
+    )
+    assert active_session["station_id"] == str(
+        station.id
+    )
+    assert (
+        active_session["station_code"]
+        == station.code
+    )
+
+    assert active_session["customer_id"] == str(
+        customer.id
+    )
+    assert (
+        active_session["customer_username"]
+        == customer.username
+    )
+    assert (
+        active_session["customer_display_name"]
+        == customer.display_name
+    )
+
+    assert (
+        active_session["authorized_seconds"]
+        == 3600
+    )
+
+    elapsed = active_session[
+        "elapsed_seconds"
+    ]
+
+    remaining = active_session[
+        "remaining_seconds"
+    ]
+
+    assert 900 <= elapsed <= 905
+    assert remaining == 3600 - elapsed
+
+
+def test_expired_active_session_reports_zero_remaining_time(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=60,
+        available_seconds=3600,
+        elapsed_seconds=120,
+    )
+
+    response = client.get(
+        "/admin/sessions/active",
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert len(data) == 1
+
+    assert data[0]["elapsed_seconds"] == 60
+    assert data[0]["remaining_seconds"] == 0
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    assert stored_session is not None
+    assert stored_session.status == "ACTIVE"
+    assert stored_session.ended_at is None
+    assert stored_session.consumed_seconds is None
+
+    stored_station = db_session.get(
+        Station,
+        station.id,
+    )
+
+    assert stored_station is not None
+    assert stored_station.status == "IN_USE"
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert wallet.available_seconds == 3540
+    assert wallet.reserved_seconds == 60
+
+
+def test_finished_sessions_are_excluded_from_active_list(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+        elapsed_seconds=900,
+    )
+
+    finish_response = client.post(
+        (
+            f"/admin/sessions/"
+            f"{usage_session.id}/finish"
+        ),
+        headers=auth_headers(admin),
+    )
+
+    assert finish_response.status_code == 200
+
+    response = client.get(
+        "/admin/sessions/active",
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_admin_can_list_multiple_active_sessions(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer_one,
+        station_one,
+        session_one,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+        elapsed_seconds=600,
+    )
+
+    customer_two = user_factory(
+        username="cliente02",
+        display_name="Cliente Dos",
+        available_seconds=7200,
+    )
+
+    station_two = _create_station(
+        db_session,
+        code="PC-02",
+    )
+
+    second_result = (
+        start_registered_customer_session(
+            db_session,
+            station_id=station_two.id,
+            customer_id=customer_two.id,
+            authorized_seconds=1800,
+            actor_user_id=admin.id,
+        )
+    )
+
+    second_session = db_session.get(
+        UsageSession,
+        second_result.session_id,
+    )
+
+    assert second_session is not None
+
+    database_now = db_session.scalar(
+        select(
+            func.clock_timestamp()
+        )
+    )
+
+    assert database_now is not None
+
+    second_session.started_at = (
+        database_now
+        - timedelta(seconds=300)
+    )
+
+    db_session.commit()
+
+    response = client.get(
+        "/admin/sessions/active",
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert len(data) == 2
+
+    session_ids = {
+        item["session_id"]
+        for item in data
+    }
+
+    assert session_ids == {
+        str(session_one.id),
+        str(second_session.id),
+    }
+
+    station_codes = {
+        item["station_code"]
+        for item in data
+    }
+
+    assert station_codes == {
+        station_one.code,
+        station_two.code,
+    }
+
+
+def test_listing_active_sessions_is_read_only(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+        elapsed_seconds=900,
+    )
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    available_before = (
+        wallet.available_seconds
+    )
+    reserved_before = (
+        wallet.reserved_seconds
+    )
+
+    transactions_before = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id
+            == wallet.id
+        )
+    ).all()
+
+    transaction_count_before = len(
+        transactions_before
+    )
+
+    response = client.get(
+        "/admin/sessions/active",
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    db_session.expire_all()
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    stored_station = db_session.get(
+        Station,
+        station.id,
+    )
+
+    assert stored_session is not None
+    assert stored_station is not None
+
+    assert (
+        wallet.available_seconds
+        == available_before
+    )
+    assert (
+        wallet.reserved_seconds
+        == reserved_before
+    )
+
+    assert stored_session.status == "ACTIVE"
+    assert stored_session.ended_at is None
+    assert stored_session.consumed_seconds is None
+
+    assert stored_station.status == "IN_USE"
+
+    transactions_after = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id
+            == wallet.id
+        )
+    ).all()
+
+    assert (
+        len(transactions_after)
+        == transaction_count_before
+    )
+
+
