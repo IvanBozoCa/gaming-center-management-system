@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -12,6 +14,7 @@ from app.api.deps import (
 )
 from app.models.user import User
 from app.schemas.usage_session import (
+    SessionFinishResponse,
     SessionStartCreate,
     SessionStartResponse,
 )
@@ -20,12 +23,17 @@ from app.services.usage_session_service import (
     InsufficientTimeBalanceError,
     InvalidAuthorizedTimeError,
     SessionCustomerNotFoundError,
+    SessionFinishConflictError,
     SessionInactiveCustomerError,
+    SessionReservationMismatchError,
     SessionStartConflictError,
     SessionStationNotFoundError,
     SessionStationUnavailableError,
     SessionWalletNotFoundError,
     StationActiveSessionError,
+    UsageSessionAlreadyFinishedError,
+    UsageSessionNotFoundError,
+    finish_registered_customer_session,
     start_registered_customer_session,
 )
 
@@ -124,4 +132,60 @@ def start_session(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Session start conflict",
+        ) from exc
+        
+@router.post(
+    "/{session_id}/finish",
+    response_model=SessionFinishResponse,
+    status_code=status.HTTP_200_OK,
+)
+def finish_session(
+    session_id: UUID,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    try:
+        return finish_registered_customer_session(
+            db,
+            session_id=session_id,
+            actor_user_id=admin.id,
+        )
+
+    except UsageSessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usage session not found",
+        ) from exc
+
+    except UsageSessionAlreadyFinishedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Usage session is already finished",
+        ) from exc
+
+    except SessionStationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Session station not found",
+        ) from exc
+
+    except SessionWalletNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer wallet not found",
+        ) from exc
+
+    except SessionReservationMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Session reservation is "
+                "inconsistent"
+            ),
+        ) from exc
+
+    except SessionFinishConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Session finish conflict",
         ) from exc

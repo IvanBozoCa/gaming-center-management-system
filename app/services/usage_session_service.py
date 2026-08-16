@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,22 @@ from app.models.time_transaction import TimeTransaction
 from app.models.time_wallet import TimeWallet
 from app.models.usage_session import UsageSession
 from app.models.user import User
+
+
+class UsageSessionNotFoundError(Exception):
+    pass
+
+
+class UsageSessionAlreadyFinishedError(Exception):
+    pass
+
+
+class SessionReservationMismatchError(Exception):
+    pass
+
+
+class SessionFinishConflictError(Exception):
+    pass
 
 
 class InvalidAuthorizedTimeError(Exception):
@@ -213,6 +229,200 @@ def start_registered_customer_session(
     except IntegrityError as exc:
         db.rollback()
         raise SessionStartConflictError from exc
+
+    except Exception:
+        db.rollback()
+        raise
+    
+    
+@dataclass(frozen=True)
+class SessionFinishResult:
+    session_id: UUID
+    station_id: UUID
+    customer_id: UUID
+    authorized_seconds: int
+    consumed_seconds: int
+    released_seconds: int
+    available_seconds: int
+    reserved_seconds: int
+    session_status: str
+    station_status: str
+    started_at: datetime
+    ended_at: datetime
+
+ 
+def finish_registered_customer_session(
+    db: Session,
+    *,
+    session_id: UUID,
+    actor_user_id: UUID,
+) -> SessionFinishResult:
+    try:
+        session_station_id = db.scalar(
+            select(UsageSession.station_id).where(
+                UsageSession.id == session_id
+        ))
+
+        if session_station_id is None:
+            raise UsageSessionNotFoundError
+        
+        ended_at = db.scalar(
+                    select(
+                        func.clock_timestamp()
+                    )
+                )
+        
+        if ended_at is None:
+                    raise SessionFinishConflictError
+        
+        station = db.scalar(
+            select(Station)
+            .where(
+                Station.id == session_station_id
+            )
+            .with_for_update()
+        )
+
+        if station is None:
+            raise SessionStationNotFoundError
+
+        usage_session = db.scalar(
+            select(UsageSession)
+            .where(
+                UsageSession.id == session_id
+            )
+            .with_for_update()
+        )
+
+        if usage_session is None:
+            raise UsageSessionNotFoundError
+
+        if usage_session.status != "ACTIVE":
+            raise UsageSessionAlreadyFinishedError
+
+        wallet = db.scalar(
+            select(TimeWallet)
+            .where(
+                TimeWallet.user_id
+                == usage_session.user_id
+            )
+            .with_for_update()
+        )
+
+        if wallet is None:
+            raise SessionWalletNotFoundError
+
+        if (
+            wallet.reserved_seconds
+            < usage_session.authorized_seconds
+        ):
+            raise SessionReservationMismatchError
+
+        
+        elapsed_seconds = int(
+            (
+                ended_at
+                - usage_session.started_at
+            ).total_seconds()
+        )
+
+        consumed_seconds = min(
+            max(
+                elapsed_seconds,
+                0,
+            ),
+            usage_session.authorized_seconds,
+        )
+
+        released_seconds = (
+            usage_session.authorized_seconds
+            - consumed_seconds
+        )
+
+        wallet.reserved_seconds -= (
+            usage_session.authorized_seconds
+        )
+
+        wallet.available_seconds += (
+            released_seconds
+        )
+
+        transactions: list[
+            TimeTransaction
+        ] = []
+
+        if consumed_seconds > 0:
+            transactions.append(
+                TimeTransaction(
+                    wallet_id=wallet.id,
+                    transaction_type=(
+                        "SESSION_USAGE"
+                    ),
+                    available_seconds_delta=0,
+                    reserved_seconds_delta=(
+                        -consumed_seconds
+                    ),
+                    actor_user_id=actor_user_id,
+                )
+            )
+
+        if released_seconds > 0:
+            transactions.append(
+                TimeTransaction(
+                    wallet_id=wallet.id,
+                    transaction_type=(
+                        "SESSION_RELEASE"
+                    ),
+                    available_seconds_delta=(
+                        released_seconds
+                    ),
+                    reserved_seconds_delta=(
+                        -released_seconds
+                    ),
+                    actor_user_id=actor_user_id,
+                )
+            )
+
+        usage_session.status = "FINISHED"
+        usage_session.consumed_seconds = (
+            consumed_seconds
+        )
+        usage_session.ended_at = ended_at
+
+        station.status = "AVAILABLE"
+
+        db.add_all(transactions)
+
+        db.flush()
+
+        result = SessionFinishResult(
+            session_id=usage_session.id,
+            station_id=station.id,
+            customer_id=usage_session.user_id,
+            authorized_seconds=(
+                usage_session.authorized_seconds
+            ),
+            consumed_seconds=consumed_seconds,
+            released_seconds=released_seconds,
+            available_seconds=(
+                wallet.available_seconds
+            ),
+            reserved_seconds=(
+                wallet.reserved_seconds
+            ),
+            session_status=usage_session.status,
+            station_status=station.status,
+            started_at=usage_session.started_at,
+            ended_at=ended_at,
+        )
+
+        db.commit()
+
+        return result
+
+    except IntegrityError as exc:
+        db.rollback()
+        raise SessionFinishConflictError from exc
 
     except Exception:
         db.rollback()
