@@ -34,6 +34,29 @@ class UsageSession(Base):
             name="ck_usage_sessions_status",
         ),
         CheckConstraint(
+                """
+                session_type IN (
+                    'REGISTERED',
+                    'GUEST'
+                )
+                """,
+                name="ck_usage_sessions_type",
+            ),
+        CheckConstraint(
+            """
+            (
+                session_type = 'REGISTERED'
+                AND user_id IS NOT NULL
+            )
+            OR
+            (
+                session_type = 'GUEST'
+                AND user_id IS NULL
+            )
+            """,
+            name="ck_usage_sessions_subject",
+            ),
+        CheckConstraint(
             "authorized_seconds > 0",
             name="ck_usage_sessions_authorized_positive",
         ),
@@ -96,13 +119,19 @@ class UsageSession(Base):
         nullable=False,
     )
 
-    user_id: Mapped[UUID] = mapped_column(
+    user_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey(
             "users.id",
             ondelete="RESTRICT",
         ),
+        nullable=True,
+    )
+    session_type: Mapped[str] = mapped_column(
+        String(20),
         nullable=False,
+        default="REGISTERED",
+        server_default=text("'REGISTERED'"),
     )
 
     status: Mapped[str] = mapped_column(
