@@ -27,6 +27,22 @@ class CustomerWalletNotFoundError(Exception):
 
 
 @dataclass(frozen=True)
+class AdminCustomerWalletResult:
+    available_seconds: int
+    reserved_seconds: int
+
+
+@dataclass(frozen=True)
+class AdminTimeTransactionResult:
+    id: UUID
+    transaction_type: str
+    available_seconds_delta: int
+    reserved_seconds_delta: int
+    actor_user_id: UUID | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class TimePurchaseResult:
     transaction_id: UUID
     customer_id: UUID
@@ -109,3 +125,102 @@ def register_time_purchase(
     except Exception:
         db.rollback()
         raise
+    
+
+def _get_customer_wallet_for_read(
+    db: Session,
+    *,
+    customer_id: UUID,
+) -> TimeWallet:
+    customer = db.scalar(
+        select(User).where(
+            User.id == customer_id
+        )
+    )
+
+    if (
+        customer is None
+        or customer.role != "CUSTOMER"
+    ):
+        raise CustomerNotFoundError
+
+    wallet = db.scalar(
+        select(TimeWallet).where(
+            TimeWallet.user_id
+            == customer.id
+        )
+    )
+
+    if wallet is None:
+        raise CustomerWalletNotFoundError
+
+    return wallet
+
+
+def get_admin_customer_wallet(
+    db: Session,
+    *,
+    customer_id: UUID,
+) -> AdminCustomerWalletResult:
+    wallet = _get_customer_wallet_for_read(
+        db,
+        customer_id=customer_id,
+    )
+
+    return AdminCustomerWalletResult(
+        available_seconds=(
+            wallet.available_seconds
+        ),
+        reserved_seconds=(
+            wallet.reserved_seconds
+        ),
+    )
+
+
+def list_admin_customer_time_transactions(
+    db: Session,
+    *,
+    customer_id: UUID,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[AdminTimeTransactionResult]:
+    wallet = _get_customer_wallet_for_read(
+        db,
+        customer_id=customer_id,
+    )
+
+    transactions = db.scalars(
+        select(TimeTransaction)
+        .where(
+            TimeTransaction.wallet_id
+            == wallet.id
+        )
+        .order_by(
+            TimeTransaction.created_at.desc(),
+            TimeTransaction.id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    return [
+        AdminTimeTransactionResult(
+            id=transaction.id,
+            transaction_type=(
+                transaction.transaction_type
+            ),
+            available_seconds_delta=(
+                transaction.available_seconds_delta
+            ),
+            reserved_seconds_delta=(
+                transaction.reserved_seconds_delta
+            ),
+            actor_user_id=(
+                transaction.actor_user_id
+            ),
+            created_at=(
+                transaction.created_at
+            ),
+        )
+        for transaction in transactions
+    ]
