@@ -72,3 +72,30 @@ class SessionFinishResponse(BaseModel):
 
     started_at: datetime
     ended_at: datetime
+
+
+class ActiveSessionResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    session_id: UUID
+
+    station_id: UUID
+    station_code: str
+
+    customer_id: UUID
+    customer_username: str
+    customer_display_name: str
+
+    authorized_seconds: int = Field(
+        gt=0,
+    )
+    started_at: datetime
+
+    elapsed_seconds: int = Field(
+        ge=0,
+    )
+    remaining_seconds: int = Field(
+        ge=0,
+    )

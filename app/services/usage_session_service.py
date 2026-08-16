@@ -13,6 +13,34 @@ from app.models.usage_session import UsageSession
 from app.models.user import User
 
 
+def _calculate_elapsed_seconds(
+    *,
+    started_at: datetime,
+    ended_at: datetime,
+    authorized_seconds: int,
+) -> int:
+    delta = ended_at - started_at
+
+    elapsed_microseconds = (
+        delta.days * 86_400_000_000
+        + delta.seconds * 1_000_000
+        + delta.microseconds
+    )
+
+    if elapsed_microseconds <= 0:
+        return 0
+
+    elapsed_seconds = (
+        elapsed_microseconds
+        // 1_000_000
+    )
+
+    return min(
+        elapsed_seconds,
+        authorized_seconds,
+    )
+
+
 class UsageSessionNotFoundError(Exception):
     pass
 
@@ -250,6 +278,20 @@ class SessionFinishResult:
     started_at: datetime
     ended_at: datetime
 
+
+@dataclass(frozen=True)
+class ActiveSessionResult:
+    session_id: UUID
+    station_id: UUID
+    station_code: str
+    customer_id: UUID
+    customer_username: str
+    customer_display_name: str
+    authorized_seconds: int
+    started_at: datetime
+    elapsed_seconds: int
+    remaining_seconds: int
+
  
 def finish_registered_customer_session(
     db: Session,
@@ -319,20 +361,14 @@ def finish_registered_customer_session(
             raise SessionReservationMismatchError
 
         
-        elapsed_seconds = int(
-            (
-                ended_at
-                - usage_session.started_at
-            ).total_seconds()
-        )
-
-        consumed_seconds = min(
-            max(
-                elapsed_seconds,
-                0,
-            ),
-            usage_session.authorized_seconds,
-        )
+        consumed_seconds = (
+            _calculate_elapsed_seconds(
+                started_at=usage_session.started_at,
+                ended_at=ended_at,
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                    ),
+                ))
 
         released_seconds = (
             usage_session.authorized_seconds
@@ -427,3 +463,100 @@ def finish_registered_customer_session(
     except Exception:
         db.rollback()
         raise
+
+
+def list_active_registered_customer_sessions(
+    db: Session,
+) -> list[ActiveSessionResult]:
+    server_now = db.scalar(
+        select(
+            func.clock_timestamp()
+        )
+    )
+
+    if server_now is None:
+        return []
+
+    rows = db.execute(
+        select(
+            UsageSession,
+            Station.code,
+            User.username,
+            User.display_name,
+        )
+        .join(
+            Station,
+            Station.id
+            == UsageSession.station_id,
+        )
+        .join(
+            User,
+            User.id
+            == UsageSession.user_id,
+        )
+        .where(
+            UsageSession.status == "ACTIVE"
+        )
+        .order_by(
+            Station.code,
+            UsageSession.started_at,
+        )
+    ).all()
+
+    results: list[
+        ActiveSessionResult
+    ] = []
+
+    for (
+        usage_session,
+        station_code,
+        customer_username,
+        customer_display_name,
+    ) in rows:
+        elapsed_seconds = (
+            _calculate_elapsed_seconds(
+                started_at=usage_session.started_at,
+                ended_at=server_now,
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                ),
+            )
+        )
+
+        remaining_seconds = (
+            usage_session.authorized_seconds
+            - elapsed_seconds
+        )
+
+        results.append(
+            ActiveSessionResult(
+                session_id=usage_session.id,
+                station_id=(
+                    usage_session.station_id
+                ),
+                station_code=station_code,
+                customer_id=(
+                    usage_session.user_id
+                ),
+                customer_username=(
+                    customer_username
+                ),
+                customer_display_name=(
+                    customer_display_name
+                ),
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                ),
+                started_at=(
+                    usage_session.started_at
+                ),
+                elapsed_seconds=(
+                    elapsed_seconds
+                ),
+                remaining_seconds=(
+                    remaining_seconds
+                ),
+            )
+        )
+
+    return results
