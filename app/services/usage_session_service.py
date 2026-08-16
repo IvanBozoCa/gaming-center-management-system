@@ -299,7 +299,7 @@ class ActiveSessionResult:
     started_at: datetime
     elapsed_seconds: int
     remaining_seconds: int
-
+    time_state: str
  
 def finish_registered_customer_session(
     db: Session,
@@ -535,6 +535,11 @@ def list_active_registered_customer_sessions(
             usage_session.authorized_seconds
             - elapsed_seconds
         )
+        time_state = (
+            "RUNNING"
+            if remaining_seconds > 0
+            else "EXHAUSTED"
+        )
 
         results.append(
             ActiveSessionResult(
@@ -563,6 +568,9 @@ def list_active_registered_customer_sessions(
                 ),
                 remaining_seconds=(
                     remaining_seconds
+                ),
+                time_state=(
+                    time_state
                 ),
             )
         )
