@@ -1,5 +1,9 @@
 from uuid import uuid4
-from datetime import timedelta
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+)
 import pytest
 from sqlalchemy import (
     event,
@@ -15,6 +19,7 @@ from app.models.usage_session import UsageSession
 from app.services.usage_session_service import (
     SessionFinishConflictError,
     SessionStartConflictError,
+    _calculate_elapsed_seconds,
     finish_registered_customer_session,
     start_registered_customer_session,
 )
@@ -1972,3 +1977,46 @@ def test_listing_active_sessions_is_read_only(
     )
 
 
+def test_elapsed_seconds_uses_exact_integer_arithmetic():
+    started_at = datetime(
+        2026,
+        8,
+        16,
+        12,
+        0,
+        0,
+        tzinfo=timezone.utc,
+    )
+
+    ended_at = (
+        started_at
+        + timedelta(
+            seconds=10,
+            microseconds=999_999,
+        )
+    )
+
+    result = _calculate_elapsed_seconds(
+        started_at=started_at,
+        ended_at=ended_at,
+        authorized_seconds=60,
+    )
+
+    assert result == 10
+    assert (
+        _calculate_elapsed_seconds(
+            started_at=started_at,
+            ended_at=started_at
+            - timedelta(seconds=5),
+            authorized_seconds=60,
+            ) == 0
+        )
+
+    assert (
+        _calculate_elapsed_seconds(
+            started_at=started_at,
+            ended_at=started_at
+            + timedelta(seconds=120),
+            authorized_seconds=60,
+            ) == 60
+        )

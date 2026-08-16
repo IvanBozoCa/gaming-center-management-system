@@ -13,6 +13,34 @@ from app.models.usage_session import UsageSession
 from app.models.user import User
 
 
+def _calculate_elapsed_seconds(
+    *,
+    started_at: datetime,
+    ended_at: datetime,
+    authorized_seconds: int,
+) -> int:
+    delta = ended_at - started_at
+
+    elapsed_microseconds = (
+        delta.days * 86_400_000_000
+        + delta.seconds * 1_000_000
+        + delta.microseconds
+    )
+
+    if elapsed_microseconds <= 0:
+        return 0
+
+    elapsed_seconds = (
+        elapsed_microseconds
+        // 1_000_000
+    )
+
+    return min(
+        elapsed_seconds,
+        authorized_seconds,
+    )
+
+
 class UsageSessionNotFoundError(Exception):
     pass
 
@@ -333,20 +361,14 @@ def finish_registered_customer_session(
             raise SessionReservationMismatchError
 
         
-        elapsed_seconds = int(
-            (
-                ended_at
-                - usage_session.started_at
-            ).total_seconds()
-        )
-
-        consumed_seconds = min(
-            max(
-                elapsed_seconds,
-                0,
-            ),
-            usage_session.authorized_seconds,
-        )
+        consumed_seconds = (
+            _calculate_elapsed_seconds(
+                started_at=usage_session.started_at,
+                ended_at=ended_at,
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                    ),
+                ))
 
         released_seconds = (
             usage_session.authorized_seconds
@@ -491,19 +513,14 @@ def list_active_registered_customer_sessions(
         customer_username,
         customer_display_name,
     ) in rows:
-        raw_elapsed_seconds = int(
-            (
-                server_now
-                - usage_session.started_at
-            ).total_seconds()
-        )
-
-        elapsed_seconds = min(
-            max(
-                raw_elapsed_seconds,
-                0,
-            ),
-            usage_session.authorized_seconds,
+        elapsed_seconds = (
+            _calculate_elapsed_seconds(
+                started_at=usage_session.started_at,
+                ended_at=server_now,
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                ),
+            )
         )
 
         remaining_seconds = (
