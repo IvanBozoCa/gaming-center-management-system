@@ -5,6 +5,8 @@ from datetime import (
     timezone,
 )
 import pytest
+from threading import Event, Thread
+from sqlalchemy.orm import Session
 from sqlalchemy import (
     event,
     func,
@@ -17,9 +19,11 @@ from app.models.time_transaction import TimeTransaction
 from app.models.time_wallet import TimeWallet
 from app.models.usage_session import UsageSession
 from app.services.usage_session_service import (
+    SessionExtensionConflictError,
     SessionFinishConflictError,
     SessionStartConflictError,
     _calculate_elapsed_seconds,
+    extend_registered_customer_session,
     finish_registered_customer_session,
     start_registered_customer_session,
 )
@@ -2020,3 +2024,807 @@ def test_elapsed_seconds_uses_exact_integer_arithmetic():
             authorized_seconds=60,
             ) == 60
         )
+
+
+def test_admin_can_extend_active_session(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+        elapsed_seconds=900,
+    )
+
+    started_at_before = usage_session.started_at
+
+    response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={
+            "additional_seconds": 1800,
+        },
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["session_id"] == str(
+        usage_session.id
+    )
+    assert data["station_id"] == str(
+        station.id
+    )
+    assert data["customer_id"] == str(
+        customer.id
+    )
+
+    assert data["additional_seconds"] == 1800
+    assert data["authorized_seconds"] == 5400
+    assert data["available_seconds"] == 1800
+    assert data["reserved_seconds"] == 5400
+    assert data["session_status"] == "ACTIVE"
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    assert stored_session is not None
+    assert stored_session.status == "ACTIVE"
+    assert stored_session.authorized_seconds == 5400
+    assert stored_session.started_at == started_at_before
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert wallet.available_seconds == 1800
+    assert wallet.reserved_seconds == 5400
+
+
+
+def test_session_extension_creates_reserve_transaction(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+    )
+
+    response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={
+            "additional_seconds": 1800,
+        },
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    transactions = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id
+            == wallet.id,
+            TimeTransaction.transaction_type
+            == "SESSION_RESERVE",
+        )
+    ).all()
+
+    assert len(transactions) == 2
+
+    extension_transactions = [
+        transaction
+        for transaction in transactions
+        if (
+            transaction.available_seconds_delta
+            == -1800
+            and transaction.reserved_seconds_delta
+            == 1800
+        )
+    ]
+
+    assert len(extension_transactions) == 1
+
+    assert (
+        extension_transactions[0].actor_user_id
+        == admin.id
+    )
+
+
+def test_multiple_session_extensions_accumulate(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=1800,
+        available_seconds=7200,
+    )
+
+    first_response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={"additional_seconds": 600},
+        headers=auth_headers(admin),
+    )
+
+    second_response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={"additional_seconds": 1200},
+        headers=auth_headers(admin),
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    assert stored_session is not None
+    assert stored_session.authorized_seconds == 3600
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert wallet.available_seconds == 3600
+    assert wallet.reserved_seconds == 3600
+    
+    
+def test_session_extension_rejects_insufficient_balance(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=3600,
+    )
+
+    response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={
+            "additional_seconds": 60,
+        },
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Insufficient time balance"
+    }
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert stored_session is not None
+    assert stored_session.authorized_seconds == 3600
+    assert wallet.available_seconds == 0
+    assert wallet.reserved_seconds == 3600
+    
+    
+def test_finished_session_cannot_be_extended(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+        elapsed_seconds=900,
+    )
+
+    finish_response = client.post(
+        f"/admin/sessions/{usage_session.id}/finish",
+        headers=auth_headers(admin),
+    )
+
+    assert finish_response.status_code == 200
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    available_before = wallet.available_seconds
+    reserved_before = wallet.reserved_seconds
+
+    transaction_count_before = len(
+        db_session.scalars(
+            select(TimeTransaction).where(
+                TimeTransaction.wallet_id
+                == wallet.id
+            )
+        ).all()
+    )
+
+    response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={
+            "additional_seconds": 1800,
+        },
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 409
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert stored_session is not None
+    assert stored_session.status == "FINISHED"
+
+    assert (
+        wallet.available_seconds
+        == available_before
+    )
+    assert (
+        wallet.reserved_seconds
+        == reserved_before
+    )
+
+    transaction_count_after = len(
+        db_session.scalars(
+            select(TimeTransaction).where(
+                TimeTransaction.wallet_id
+                == wallet.id
+            )
+        ).all()
+    )
+
+    assert (
+        transaction_count_after
+        == transaction_count_before
+    )
+
+
+@pytest.mark.parametrize(
+    "additional_seconds",
+    [0, -1, -300],
+)
+def test_session_extension_rejects_non_positive_time(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+    additional_seconds,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+    )
+
+    response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={
+            "additional_seconds": additional_seconds,
+        },
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 422
+
+
+
+def test_unknown_session_extension_returns_404(
+    client,
+    user_factory,
+    auth_headers,
+):
+    admin = user_factory(
+        username="admin01",
+        role="ADMIN",
+    )
+
+    response = client.post(
+        f"/admin/sessions/{uuid4()}/extend",
+        json={"additional_seconds": 1800},
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 404
+
+
+def test_customer_cannot_extend_session(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+    )
+
+    response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={"additional_seconds": 1800},
+        headers=auth_headers(customer),
+    )
+
+    assert response.status_code == 403
+
+
+def test_session_extension_requires_authentication(
+    client,
+    db_session,
+    user_factory,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+    )
+
+    response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={"additional_seconds": 1800},
+    )
+
+    assert response.status_code == 401
+    
+    
+def test_session_extension_rolls_back_if_ledger_fails(
+    db_session,
+    user_factory,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=7200,
+    )
+
+    original_started_at = usage_session.started_at
+
+    with pytest.raises(
+        SessionExtensionConflictError
+    ):
+        extend_registered_customer_session(
+            db_session,
+            session_id=usage_session.id,
+            additional_seconds=1800,
+            actor_user_id=uuid4(),
+        )
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert stored_session is not None
+
+    assert stored_session.status == "ACTIVE"
+    assert stored_session.authorized_seconds == 3600
+    assert stored_session.started_at == original_started_at
+
+    assert wallet.available_seconds == 3600
+    assert wallet.reserved_seconds == 3600
+
+
+def test_finish_uses_extended_authorized_time(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=9000,
+        elapsed_seconds=4500,
+    )
+
+    extend_response = client.post(
+        f"/admin/sessions/{usage_session.id}/extend",
+        json={
+            "additional_seconds": 1800,
+        },
+        headers=auth_headers(admin),
+    )
+
+    assert extend_response.status_code == 200
+    assert (
+        extend_response.json()["authorized_seconds"]
+        == 5400
+    )
+
+    finish_response = client.post(
+        f"/admin/sessions/{usage_session.id}/finish",
+        headers=auth_headers(admin),
+    )
+
+    assert finish_response.status_code == 200
+
+    data = finish_response.json()
+
+    assert data["authorized_seconds"] == 5400
+    assert 4500 <= data["consumed_seconds"] <= 4505
+
+    assert data["released_seconds"] == (
+        5400 - data["consumed_seconds"]
+    )
+
+    assert data["reserved_seconds"] == 0
+
+
+def test_extend_and_finish_are_serialized_by_session_lock(
+    db_session,
+    user_factory,
+):
+    (
+        admin,
+        customer,
+        station,
+        usage_session,
+    ) = _prepare_active_session(
+        db_session,
+        user_factory,
+        authorized_seconds=3600,
+        available_seconds=9000,
+        elapsed_seconds=4500,
+    )
+
+    bind = db_session.get_bind()
+
+    extend_db = Session(
+        bind=bind,
+        autoflush=False,
+        expire_on_commit=False,
+    )
+
+    finish_db = Session(
+        bind=bind,
+        autoflush=False,
+        expire_on_commit=False,
+    )
+
+    extend_has_session_lock = Event()
+    allow_extend_to_continue = Event()
+    finish_attempted_session_lock = Event()
+
+    results = {}
+    errors = []
+
+    def after_cursor_execute(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ):
+        role = conn.info.get(
+            "session_concurrency_test_role"
+        )
+
+        normalized_statement = (
+            " ".join(
+                statement.upper().split()
+            )
+        )
+
+        if (
+            role == "extend"
+            and "FOR UPDATE"
+            in normalized_statement
+            and "USAGE_SESSIONS"
+            in normalized_statement
+        ):
+            extend_has_session_lock.set()
+
+            if not allow_extend_to_continue.wait(
+                timeout=5
+            ):
+                raise RuntimeError(
+                    "Timed out waiting to "
+                    "release extension lock"
+                )
+
+    def before_cursor_execute(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ):
+        role = conn.info.get(
+            "session_concurrency_test_role"
+        )
+
+        normalized_statement = (
+            " ".join(
+                statement.upper().split()
+            )
+        )
+
+        if (
+            role == "finish"
+            and "FOR UPDATE"
+            in normalized_statement
+            and "USAGE_SESSIONS"
+            in normalized_statement
+        ):
+            finish_attempted_session_lock.set()
+
+    def run_extension():
+        try:
+            connection = extend_db.connection()
+
+            connection.info[
+                "session_concurrency_test_role"
+            ] = "extend"
+
+            results["extend"] = (
+                extend_registered_customer_session(
+                    extend_db,
+                    session_id=usage_session.id,
+                    additional_seconds=1800,
+                    actor_user_id=admin.id,
+                )
+            )
+
+        except Exception as exc:
+            errors.append(exc)
+
+    def run_finish():
+        try:
+            connection = finish_db.connection()
+
+            connection.info[
+                "session_concurrency_test_role"
+            ] = "finish"
+
+            results["finish"] = (
+                finish_registered_customer_session(
+                    finish_db,
+                    session_id=usage_session.id,
+                    actor_user_id=admin.id,
+                )
+            )
+
+        except Exception as exc:
+            errors.append(exc)
+
+    event.listen(
+        bind,
+        "after_cursor_execute",
+        after_cursor_execute,
+    )
+
+    event.listen(
+        bind,
+        "before_cursor_execute",
+        before_cursor_execute,
+    )
+
+    extend_thread = Thread(
+        target=run_extension,
+        daemon=True,
+    )
+
+    finish_thread = Thread(
+        target=run_finish,
+        daemon=True,
+    )
+
+    try:
+        extend_thread.start()
+
+        assert extend_has_session_lock.wait(
+            timeout=5
+        )
+
+        finish_thread.start()
+
+        assert finish_attempted_session_lock.wait(
+            timeout=5
+        )
+
+        # FINISH ya intentó bloquear UsageSession,
+        # pero EXTEND todavía conserva el lock.
+        assert finish_thread.is_alive()
+
+        allow_extend_to_continue.set()
+
+        extend_thread.join(timeout=10)
+        finish_thread.join(timeout=10)
+
+    finally:
+        allow_extend_to_continue.set()
+
+        event.remove(
+            bind,
+            "after_cursor_execute",
+            after_cursor_execute,
+        )
+
+        event.remove(
+            bind,
+            "before_cursor_execute",
+            before_cursor_execute,
+        )
+
+        extend_thread.join(timeout=1)
+        finish_thread.join(timeout=1)
+
+        if not extend_thread.is_alive():
+            extend_db.close()
+
+        if not finish_thread.is_alive():
+            finish_db.close()
+
+    assert not extend_thread.is_alive()
+    assert not finish_thread.is_alive()
+
+    assert errors == []
+
+    extension_result = results["extend"]
+    finish_result = results["finish"]
+
+    assert (
+        extension_result.authorized_seconds
+        == 5400
+    )
+
+    assert (
+        finish_result.authorized_seconds
+        == 5400
+    )
+
+    assert (
+        3600
+        < finish_result.consumed_seconds
+        <= 5400
+    )
+
+    db_session.expire_all()
+
+    stored_session = db_session.get(
+        UsageSession,
+        usage_session.id,
+    )
+
+    stored_station = db_session.get(
+        Station,
+        station.id,
+    )
+
+    wallet = _get_wallet(
+        db_session,
+        customer.id,
+    )
+
+    assert stored_session is not None
+    assert stored_station is not None
+
+    assert stored_session.status == "FINISHED"
+    assert stored_session.authorized_seconds == 5400
+
+    assert stored_station.status == "AVAILABLE"
+
+    assert wallet.reserved_seconds == 0
+
+    assert wallet.available_seconds == (
+        9000
+        - stored_session.consumed_seconds
+    )
+
+    reserve_transactions = db_session.scalars(
+        select(TimeTransaction).where(
+            TimeTransaction.wallet_id
+            == wallet.id,
+            TimeTransaction.transaction_type
+            == "SESSION_RESERVE",
+        )
+    ).all()
+
+    assert len(reserve_transactions) == 2
