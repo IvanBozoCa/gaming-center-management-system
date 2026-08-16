@@ -97,6 +97,14 @@ class SessionStartConflictError(Exception):
     pass
 
 
+class InvalidAdditionalTimeError(Exception):
+    pass
+
+
+class SessionExtensionConflictError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class SessionStartResult:
     session_id: UUID
@@ -560,3 +568,124 @@ def list_active_registered_customer_sessions(
         )
 
     return results
+
+
+@dataclass(frozen=True)
+class SessionExtensionResult:
+    session_id: UUID
+    station_id: UUID
+    customer_id: UUID
+    additional_seconds: int
+    authorized_seconds: int
+    available_seconds: int
+    reserved_seconds: int
+    session_status: str
+    started_at: datetime
+
+
+def extend_registered_customer_session(
+    db: Session,
+    *,
+    session_id: UUID,
+    additional_seconds: int,
+    actor_user_id: UUID,
+) -> SessionExtensionResult:
+    if additional_seconds <= 0:
+        raise InvalidAdditionalTimeError
+
+    try:
+        usage_session = db.scalar(
+            select(UsageSession)
+            .where(
+                UsageSession.id == session_id
+            )
+            .with_for_update()
+        )
+
+        if usage_session is None:
+            raise UsageSessionNotFoundError
+
+        if usage_session.status != "ACTIVE":
+            raise UsageSessionAlreadyFinishedError
+
+        wallet = db.scalar(
+            select(TimeWallet)
+            .where(
+                TimeWallet.user_id
+                == usage_session.user_id
+            )
+            .with_for_update()
+        )
+
+        if wallet is None:
+            raise SessionWalletNotFoundError
+
+        if (
+            wallet.available_seconds
+            < additional_seconds
+        ):
+            raise InsufficientTimeBalanceError
+
+        wallet.available_seconds -= (
+            additional_seconds
+        )
+
+        wallet.reserved_seconds += (
+            additional_seconds
+        )
+
+        usage_session.authorized_seconds += (
+            additional_seconds
+        )
+
+        transaction = TimeTransaction(
+            wallet_id=wallet.id,
+            transaction_type="SESSION_RESERVE",
+            available_seconds_delta=(
+                -additional_seconds
+            ),
+            reserved_seconds_delta=(
+                additional_seconds
+            ),
+            actor_user_id=actor_user_id,
+        )
+
+        db.add(transaction)
+
+        db.flush()
+
+        result = SessionExtensionResult(
+            session_id=usage_session.id,
+            station_id=usage_session.station_id,
+            customer_id=usage_session.user_id,
+            additional_seconds=(
+                additional_seconds
+            ),
+            authorized_seconds=(
+                usage_session.authorized_seconds
+            ),
+            available_seconds=(
+                wallet.available_seconds
+            ),
+            reserved_seconds=(
+                wallet.reserved_seconds
+            ),
+            session_status=(
+                usage_session.status
+            ),
+            started_at=(
+                usage_session.started_at
+            ),
+        )
+
+        db.commit()
+
+        return result
+
+    except IntegrityError as exc:
+        db.rollback()
+        raise SessionExtensionConflictError from exc
+
+    except Exception:
+        db.rollback()
+        raise
