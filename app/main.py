@@ -13,7 +13,9 @@ from app.api.routes.me import router as me_router
 from app.api.routes.admin import (
     router as admin_router,
 )
-
+from app.api.routes.admin_guest_sessions import (
+    router as admin_guest_sessions_router,
+)
 
 app = FastAPI(
     title="Gaming Center Management System API",
@@ -26,6 +28,7 @@ app.include_router(admin_router)
 app.include_router(admin_customers_router)
 app.include_router(admin_stations_router)
 app.include_router(admin_sessions_router)
+app.include_router(admin_guest_sessions_router)
 
 @app.get("/health")
 def health_check():

@@ -105,6 +105,10 @@ class SessionExtensionConflictError(Exception):
     pass
 
 
+class GuestSessionStartConflictError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class SessionStartResult:
     session_id: UUID
@@ -116,6 +120,20 @@ class SessionStartResult:
     station_status: str
     started_at: datetime
 
+
+@dataclass(frozen=True)
+class GuestSessionStartResult:
+    session_id: UUID
+    station_id: UUID
+
+    authorized_seconds: int
+
+    session_type: str
+    session_status: str
+    station_status: str
+
+    started_at: datetime
+    
 
 def start_registered_customer_session(
     db: Session,
@@ -269,6 +287,92 @@ def start_registered_customer_session(
     except Exception:
         db.rollback()
         raise
+    
+
+def start_guest_session(
+    db: Session,
+    *,
+    station_id: UUID,
+    authorized_seconds: int,
+) -> GuestSessionStartResult:
+    if authorized_seconds <= 0:
+        raise InvalidAuthorizedTimeError
+
+    try:
+        station = db.scalar(
+            select(Station)
+            .where(
+                Station.id == station_id
+            )
+            .with_for_update()
+        )
+
+        if station is None:
+            raise SessionStationNotFoundError
+
+        if station.status != "AVAILABLE":
+            raise SessionStationUnavailableError
+
+        active_station_session = db.scalar(
+            select(UsageSession.id)
+            .where(
+                UsageSession.station_id
+                == station.id,
+                UsageSession.status
+                == "ACTIVE",
+            )
+            .limit(1)
+        )
+
+        if active_station_session is not None:
+            raise StationActiveSessionError
+
+        usage_session = UsageSession(
+            station_id=station.id,
+            user_id=None,
+            session_type="GUEST",
+            status="ACTIVE",
+            authorized_seconds=(
+                authorized_seconds
+            ),
+        )
+
+        station.status = "IN_USE"
+
+        db.add(usage_session)
+
+        db.flush()
+        db.refresh(usage_session)
+
+        result = GuestSessionStartResult(
+            session_id=usage_session.id,
+            station_id=station.id,
+            authorized_seconds=(
+                usage_session.authorized_seconds
+            ),
+            session_type=(
+                usage_session.session_type
+            ),
+            session_status=(
+                usage_session.status
+            ),
+            station_status=station.status,
+            started_at=usage_session.started_at,
+        )
+
+        db.commit()
+
+        return result
+
+    except IntegrityError as exc:
+        db.rollback()
+
+        raise GuestSessionStartConflictError from exc
+
+    except Exception:
+        db.rollback()
+        raise
+    
     
     
 @dataclass(frozen=True)
