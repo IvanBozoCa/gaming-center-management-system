@@ -7,6 +7,7 @@ import {
 import { AdminLayout } from "./layouts/AdminLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import {  RequireAdmin } from "../features/auth/RequireAdmin";
 
 export function App() {
   return (
@@ -15,7 +16,7 @@ export function App() {
         path="/login"
         element={<LoginPage />}
       />
-
+    <Route element={<RequireAdmin />}>
       <Route element={<AdminLayout />}>
         <Route
           path="/customers"
@@ -68,6 +69,7 @@ export function App() {
           }
         />
       </Route>
+    </Route>
 
       <Route
         path="/"

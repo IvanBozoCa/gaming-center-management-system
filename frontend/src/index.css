@@ -46,6 +46,9 @@ textarea {
   padding: 2rem 1.25rem;
   border-right: 1px solid #253047;
   background: #111a2b;
+
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar h2 {
@@ -201,4 +204,46 @@ textarea {
   border-radius: 8px;
   color: #ffccd5;
   background: #29151a;
+}
+
+.sidebar-user {
+  margin-top: auto;
+  padding-top: 2rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sidebar-user-name,
+.sidebar-user-role {
+  display: block;
+}
+
+.sidebar-user-name {
+  font-weight: 600;
+}
+
+.sidebar-user-role {
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  color: #9da9bc;
+}
+
+.logout-button {
+  padding: 0.7rem;
+  border: 1px solid #34415a;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #e7e9ee;
+  background: transparent;
+}
+
+.logout-button:hover {
+  background: #172238;
+}
+
+.auth-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #9da9bc;
 }

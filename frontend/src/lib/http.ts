@@ -9,6 +9,20 @@ interface ApiRequestOptions
   token?: string;
 }
 
+
+type UnauthorizedHandler =
+  () => void;
+
+let unauthorizedHandler:
+  UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(
+  handler: UnauthorizedHandler | null,
+): void {
+  unauthorizedHandler = handler;
+}
+
+
 export class ApiError extends Error {
   readonly status: number;
 
@@ -55,6 +69,10 @@ export async function apiRequest<T>(
       headers: requestHeaders,
     },
   );
+  
+  if (response.status === 401) {
+    unauthorizedHandler?.();
+  }
 
   if (!response.ok) {
     let message =

@@ -2,14 +2,17 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate,Navigate, } from "react-router";
+
+import {  useAuth, } from "../../features/auth/useAuth";
 
 import { login } from "../../features/auth/api";
-import { setAccessToken } from "../../features/auth/storage";
+
 import { ApiError } from "../../lib/http";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { user, establishSession, } = useAuth();
 
   const [username, setUsername] =
     useState("");
@@ -22,6 +25,15 @@ export function LoginPage() {
 
   const [error, setError] =
     useState<string | null>(null);
+  
+  if (user?.role === "ADMIN") {
+  return (
+    <Navigate
+      to="/customers"
+      replace
+    />
+  );
+}
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -51,9 +63,7 @@ export function LoginPage() {
         password,
       });
 
-      setAccessToken(
-        response.access_token,
-      );
+      await establishSession( response.access_token, );
 
       navigate(
         "/customers",

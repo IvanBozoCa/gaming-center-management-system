@@ -3,6 +3,10 @@ import {
   Outlet,
 } from "react-router";
 
+import {
+  useAuth,
+} from "../../features/auth/useAuth";
+
 const navigationItems = [
   {
     to: "/customers",
@@ -23,9 +27,29 @@ const navigationItems = [
 ];
 
 export function AdminLayout() {
+  const { user, logout, } = useAuth();
   return (
     <div className="admin-layout">
       <aside className="sidebar">
+        <div className="sidebar-user">
+  <div>
+    <span className="sidebar-user-name">
+      {user?.display_name}
+    </span>
+
+    <span className="sidebar-user-role">
+      Administrador
+    </span>
+  </div>
+
+  <button
+    className="logout-button"
+    type="button"
+    onClick={logout}
+  >
+    Cerrar sesión
+  </button>
+</div>
         <div>
           <p className="eyebrow">
             GCMS

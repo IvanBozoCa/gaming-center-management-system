@@ -1,6 +1,7 @@
 import { apiRequest } from "../../lib/http";
 
 import type {
+  CurrentUserResponse,
   LoginCredentials,
   TokenResponse,
 } from "./types";
@@ -30,6 +31,17 @@ export async function login(
           "application/x-www-form-urlencoded",
       },
       body: formData,
+    },
+  );
+}
+
+export function getCurrentUser(
+  token: string,
+): Promise<CurrentUserResponse> {
+  return apiRequest<CurrentUserResponse>(
+    "/auth/me",
+    {
+      token,
     },
   );
 }
