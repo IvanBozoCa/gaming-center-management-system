@@ -15,8 +15,13 @@ from app.api.deps import (
 from app.models.user import User
 from app.schemas.admin_customer import (
     AdminCustomerSummaryResponse,
+    AdminCustomerDetailResponse,
+    
 )
 from app.services.user_service import (
+    AdminCustomerNotFoundError,
+    AdminCustomerWalletNotFoundError,
+    get_admin_customer_detail,
     list_admin_customers,
 )
 from app.schemas.time_transaction import (
@@ -161,3 +166,41 @@ def get_customer_time_transactions(
             status_code=status.HTTP_409_CONFLICT,
             detail="Customer wallet not found",
         ) from exc
+    
+
+
+@router.get(
+    "/{customer_id}",
+    response_model=AdminCustomerDetailResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Consultar detalle de un cliente",
+    description=(
+        "Devuelve el perfil administrativo y "
+        "saldo actual de un cliente registrado. "
+        "La operación es exclusivamente de lectura."
+    ),
+)
+def get_customer_detail(
+    customer_id: UUID,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    try:
+        return get_admin_customer_detail(
+            db,
+            customer_id=customer_id,
+        )
+
+    except AdminCustomerNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found",
+        ) from exc
+
+    except AdminCustomerWalletNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Customer wallet not found",
+        ) from exc
+    
+
