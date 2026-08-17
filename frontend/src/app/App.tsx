@@ -4,6 +4,7 @@ import { RequireAdmin } from "../features/auth/RequireAdmin";
 import { AdminLayout } from "./layouts/AdminLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { StationsPage } from "./pages/StationsPage";
 
 export function App() {
   return (
@@ -12,22 +13,9 @@ export function App() {
 
       <Route element={<RequireAdmin />}>
         <Route element={<AdminLayout />}>
-          <Route
-            path="/customers"
-            element={<CustomersPage />}
-          />
+          <Route path="/customers" element={<CustomersPage />} />
 
-          <Route
-            path="/stations"
-            element={
-              <PlaceholderPage
-                title="Estaciones"
-                description={
-                  "Administración de los " + "equipos del gaming center."
-                }
-              />
-            }
-          />
+          <Route path="/stations" element={<StationsPage />} />
 
           <Route
             path="/sessions"
