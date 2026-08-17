@@ -961,6 +961,117 @@ def list_finished_registered_customer_sessions(
 
     return results
 
+
+@dataclass(frozen=True)
+class FinishedGuestSessionHistoryResult:
+    session_id: UUID
+
+    station_id: UUID
+    station_code: str
+
+    authorized_seconds: int
+    consumed_seconds: int
+    unused_seconds: int
+
+    started_at: datetime
+    ended_at: datetime
+
+
+def list_finished_guest_sessions(
+    db: Session,
+    *,
+    station_id: UUID | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[FinishedGuestSessionHistoryResult]:
+    statement = (
+        select(
+            UsageSession,
+            Station.code,
+        )
+        .join(
+            Station,
+            Station.id
+            == UsageSession.station_id,
+        )
+        .where(
+            UsageSession.status == "FINISHED",
+            UsageSession.session_type == "GUEST",
+        )
+    )
+
+    if station_id is not None:
+        statement = statement.where(
+            UsageSession.station_id
+            == station_id
+        )
+
+    statement = (
+        statement
+        .order_by(
+            UsageSession.ended_at.desc(),
+            UsageSession.id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+
+    rows = db.execute(statement).all()
+
+    results: list[
+        FinishedGuestSessionHistoryResult
+    ] = []
+
+    for (
+        usage_session,
+        station_code,
+    ) in rows:
+        consumed_seconds = (
+            usage_session.consumed_seconds
+        )
+
+        ended_at = usage_session.ended_at
+
+        if (
+            consumed_seconds is None
+            or ended_at is None
+        ):
+            continue
+
+        unused_seconds = (
+            usage_session.authorized_seconds
+            - consumed_seconds
+        )
+
+        results.append(
+            FinishedGuestSessionHistoryResult(
+                session_id=usage_session.id,
+
+                station_id=(
+                    usage_session.station_id
+                ),
+                station_code=station_code,
+
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                ),
+                consumed_seconds=(
+                    consumed_seconds
+                ),
+                unused_seconds=(
+                    unused_seconds
+                ),
+
+                started_at=(
+                    usage_session.started_at
+                ),
+                ended_at=ended_at,
+            )
+        )
+
+    return results
+
+
 @dataclass(frozen=True)
 class ActiveGuestSessionResult:
     session_id: UUID
