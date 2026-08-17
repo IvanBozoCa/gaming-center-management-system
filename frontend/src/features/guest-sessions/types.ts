@@ -1,0 +1,64 @@
+export type GuestSessionTimeState = "RUNNING" | "EXHAUSTED";
+
+export interface StartGuestSessionInput {
+  station_id: string;
+  authorized_seconds: number;
+}
+
+export interface GuestSessionStartResponse {
+  session_id: string;
+  station_id: string;
+  authorized_seconds: number;
+  session_type: "GUEST";
+  session_status: "ACTIVE";
+  station_status: "IN_USE";
+  started_at: string;
+}
+
+export interface ActiveGuestSession {
+  session_id: string;
+  station_id: string;
+  station_code: string;
+  authorized_seconds: number;
+  started_at: string;
+  elapsed_seconds: number;
+  remaining_seconds: number;
+  time_state: GuestSessionTimeState;
+}
+
+export interface GuestSessionFinishResponse {
+  session_id: string;
+  station_id: string;
+
+  authorized_seconds: number;
+  consumed_seconds: number;
+  unused_seconds: number;
+
+  session_type: "GUEST";
+  session_status: "FINISHED";
+  station_status: "AVAILABLE";
+
+  started_at: string;
+  ended_at: string;
+}
+
+export interface FinishedGuestSession {
+  session_id: string;
+
+  station_id: string;
+  station_code: string;
+
+  authorized_seconds: number;
+  consumed_seconds: number;
+  unused_seconds: number;
+
+  started_at: string;
+  ended_at: string;
+}
+
+export interface ListGuestSessionHistoryParams {
+  stationId?: string;
+  limit?: number;
+  offset?: number;
+}
+
