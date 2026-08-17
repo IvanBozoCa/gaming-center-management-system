@@ -85,9 +85,15 @@ export function listRegisteredSessionHistory(
     searchParams.set("station_id", params.stationId);
   }
 
-  searchParams.set("limit", String(params.limit ?? 20));
+  searchParams.set(
+    "limit",
+    String(params.limit ?? 20),
+  );
 
-  searchParams.set("offset", String(params.offset ?? 0));
+  searchParams.set(
+    "offset",
+    String(params.offset ?? 0),
+  );
 
   return apiRequest<FinishedRegisteredSession[]>(
     `/admin/sessions/history?${searchParams.toString()}`,
