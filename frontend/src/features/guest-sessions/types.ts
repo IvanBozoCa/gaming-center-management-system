@@ -41,3 +41,24 @@ export interface GuestSessionFinishResponse {
   started_at: string;
   ended_at: string;
 }
+
+export interface FinishedGuestSession {
+  session_id: string;
+
+  station_id: string;
+  station_code: string;
+
+  authorized_seconds: number;
+  consumed_seconds: number;
+  unused_seconds: number;
+
+  started_at: string;
+  ended_at: string;
+}
+
+export interface ListGuestSessionHistoryParams {
+  stationId?: string;
+  limit?: number;
+  offset?: number;
+}
+

@@ -6,6 +6,8 @@ import type {
   GuestSessionFinishResponse,
   GuestSessionStartResponse,
   StartGuestSessionInput,
+  FinishedGuestSession,
+  ListGuestSessionHistoryParams,
 } from "./types";
 
 function requireAccessToken(): string {
@@ -44,6 +46,26 @@ export function finishGuestSession(
     `/admin/guest-sessions/${sessionId}/finish`,
     {
       method: "POST",
+      token: requireAccessToken(),
+    },
+  );
+}
+
+export function listGuestSessionHistory(
+  params: ListGuestSessionHistoryParams = {},
+): Promise<FinishedGuestSession[]> {
+  const searchParams = new URLSearchParams();
+
+  if (params.stationId) {
+    searchParams.set("station_id", params.stationId);
+  }
+
+  searchParams.set("limit", String(params.limit ?? 20));
+  searchParams.set("offset", String(params.offset ?? 0));
+
+  return apiRequest<FinishedGuestSession[]>(
+    `/admin/guest-sessions/history?${searchParams.toString()}`,
+    {
       token: requireAccessToken(),
     },
   );

@@ -3,11 +3,13 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   finishGuestSession,
   listActiveGuestSessions,
+  listGuestSessionHistory,
   startGuestSession,
 } from "../../features/guest-sessions/api";
 
 import type {
   ActiveGuestSession,
+  FinishedGuestSession,
   GuestSessionTimeState,
 } from "../../features/guest-sessions/types";
 
@@ -86,6 +88,7 @@ function getFinishErrorMessage(error: unknown): string {
 
   return "No fue posible finalizar la sesión de invitado.";
 }
+const GUEST_HISTORY_PAGE_SIZE = 20;
 
 export function GuestSessionsPage() {
   const [sessions, setSessions] = useState<ActiveGuestSession[]>([]);
@@ -106,6 +109,19 @@ export function GuestSessionsPage() {
   const [finishingSessionId, setFinishingSessionId] = useState<string | null>(
     null,
   );
+  const [history, setHistory] = useState<FinishedGuestSession[]>([]);
+
+  const [historyStations, setHistoryStations] = useState<Station[]>([]);
+
+  const [historyStationId, setHistoryStationId] = useState("");
+
+  const [historyOffset, setHistoryOffset] = useState(0);
+
+  const [historyHasNext, setHistoryHasNext] = useState(false);
+
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const [finishError, setFinishError] = useState<string | null>(null);
 
@@ -153,6 +169,54 @@ export function GuestSessionsPage() {
       setIsLoadingStations(false);
     }
   }, []);
+
+  const loadHistoryStations = useCallback(async (): Promise<boolean> => {
+    try {
+      const data = await listStations();
+
+      setHistoryStations(data);
+
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const loadHistory = useCallback(
+    async (offset: number, stationId: string): Promise<boolean> => {
+      setIsHistoryLoading(true);
+      setHistoryError(null);
+
+      try {
+        const data = await listGuestSessionHistory({
+          stationId: stationId || undefined,
+          limit: GUEST_HISTORY_PAGE_SIZE + 1,
+          offset,
+        });
+
+        setHistory(data.slice(0, GUEST_HISTORY_PAGE_SIZE));
+
+        setHistoryHasNext(data.length > GUEST_HISTORY_PAGE_SIZE);
+
+        return true;
+      } catch {
+        setHistoryError("No fue posible cargar el historial GUEST.");
+
+        return false;
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    },
+    [],
+  );
+  useEffect(() => {
+    void loadHistoryStations();
+  }, [loadHistoryStations]);
+
+  useEffect(() => {
+    void loadHistory(historyOffset, historyStationId);
+  }, [loadHistory, historyOffset, historyStationId]);
+
   useEffect(() => {
     void loadSessions();
   }, [loadSessions]);
@@ -249,11 +313,14 @@ export function GuestSessionsPage() {
         ),
       );
 
-      const stationsUpdated = await loadAvailableStations();
+      const [stationsUpdated, historyUpdated] = await Promise.all([
+        loadAvailableStations(),
+        loadHistory(historyOffset, historyStationId),
+      ]);
 
-      if (!stationsUpdated) {
+      if (!stationsUpdated || !historyUpdated) {
         setFeedback(
-          "La sesión fue finalizada, pero no fue posible actualizar las estaciones.",
+          "La sesión fue finalizada, pero no fue posible actualizar toda la pantalla.",
         );
       } else {
         setFeedback(
@@ -454,6 +521,124 @@ export function GuestSessionsPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </section>
+      <section className="session-history-section">
+        <div className="section-header">
+          <div>
+            <h2>Historial GUEST</h2>
+
+            <p className="page-description">
+              Sesiones de invitados finalizadas.
+            </p>
+          </div>
+        </div>
+
+        <div className="session-history-filters guest-history-filters">
+          <label className="form-field">
+            <span>Estación</span>
+
+            <select
+              value={historyStationId}
+              onChange={(event) => {
+                setHistoryStationId(event.target.value);
+                setHistoryOffset(0);
+              }}
+            >
+              <option value="">Todas las estaciones</option>
+
+              {historyStations.map((station) => (
+                <option key={station.id} value={station.id}>
+                  {station.code}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {historyError && (
+          <p className="form-error" role="alert">
+            {historyError}
+          </p>
+        )}
+
+        {isHistoryLoading ? (
+          <div className="content-state">Cargando historial...</div>
+        ) : history.length === 0 ? (
+          <div className="content-state">
+            No hay sesiones GUEST finalizadas para este filtro.
+          </div>
+        ) : (
+          <>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Estación</th>
+                    <th>Autorizado</th>
+                    <th>Consumido</th>
+                    <th>No utilizado</th>
+                    <th>Inicio</th>
+                    <th>Fin</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {history.map((session) => (
+                    <tr key={session.session_id}>
+                      <td>
+                        <strong>{session.station_code}</strong>
+
+                        <div className="table-secondary-text">Invitado</div>
+                      </td>
+
+                      <td>{formatDuration(session.authorized_seconds)}</td>
+
+                      <td>{formatDuration(session.consumed_seconds)}</td>
+
+                      <td>{formatDuration(session.unused_seconds)}</td>
+
+                      <td>{formatDateTime(session.started_at)}</td>
+
+                      <td>{formatDateTime(session.ended_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pagination-controls">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={historyOffset === 0 || isHistoryLoading}
+                onClick={() =>
+                  setHistoryOffset((current) =>
+                    Math.max(0, current - GUEST_HISTORY_PAGE_SIZE),
+                  )
+                }
+              >
+                Anterior
+              </button>
+
+              <span>
+                Página {Math.floor(historyOffset / GUEST_HISTORY_PAGE_SIZE) + 1}
+              </span>
+
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!historyHasNext || isHistoryLoading}
+                onClick={() =>
+                  setHistoryOffset(
+                    (current) => current + GUEST_HISTORY_PAGE_SIZE,
+                  )
+                }
+              >
+                Siguiente
+              </button>
+            </div>
+          </>
         )}
       </section>
     </section>

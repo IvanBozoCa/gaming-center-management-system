@@ -697,3 +697,8 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.guest-history-filters {
+  grid-template-columns: minmax(220px, 350px);
+}
+
