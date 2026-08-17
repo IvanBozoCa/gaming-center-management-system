@@ -1,7 +1,6 @@
-import {
-  NavLink,
-  Outlet,
-} from "react-router";
+import { NavLink, Outlet } from "react-router";
+
+import { useAuth } from "../../features/auth/useAuth";
 
 const navigationItems = [
   {
@@ -23,14 +22,13 @@ const navigationItems = [
 ];
 
 export function AdminLayout() {
+  const { user, logout } = useAuth();
+
   return (
     <div className="admin-layout">
       <aside className="sidebar">
         <div>
-          <p className="eyebrow">
-            GCMS
-          </p>
-
+          <p className="eyebrow">GCMS</p>
           <h2>Gaming Center</h2>
         </div>
 
@@ -40,15 +38,28 @@ export function AdminLayout() {
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                isActive
-                  ? "nav-link active"
-                  : "nav-link"
+                isActive ? "nav-link active" : "nav-link"
               }
             >
               {item.label}
             </NavLink>
           ))}
         </nav>
+
+        <div className="sidebar-user">
+          <div>
+            <span className="sidebar-user-name">{user?.display_name}</span>
+            <span className="sidebar-user-role">Administrador</span>
+          </div>
+
+          <button
+            className="logout-button"
+            type="button"
+            onClick={logout}
+          >
+            Cerrar sesión
+          </button>
+        </div>
       </aside>
 
       <main className="content">
