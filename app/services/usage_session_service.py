@@ -109,6 +109,14 @@ class GuestSessionStartConflictError(Exception):
     pass
 
 
+class GuestSessionNotFoundError(Exception):
+    pass
+
+
+class GuestSessionFinishConflictError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class SessionStartResult:
     session_id: UUID
@@ -1042,3 +1050,142 @@ def list_active_guest_sessions(
         )
 
     return results
+
+
+@dataclass(frozen=True)
+class GuestSessionFinishResult:
+    session_id: UUID
+    station_id: UUID
+
+    authorized_seconds: int
+    consumed_seconds: int
+    unused_seconds: int
+
+    session_type: str
+    session_status: str
+    station_status: str
+
+    started_at: datetime
+    ended_at: datetime
+    
+    
+def finish_guest_session(
+    db: Session,
+    *,
+    session_id: UUID,
+) -> GuestSessionFinishResult:
+    try:
+        session_station_id = db.scalar(
+            select(
+                UsageSession.station_id
+            ).where(
+                UsageSession.id == session_id,
+                UsageSession.session_type
+                == "GUEST",
+            )
+        )
+
+        if session_station_id is None:
+            raise GuestSessionNotFoundError
+
+        ended_at = db.scalar(
+            select(
+                func.clock_timestamp()
+            )
+        )
+
+        if ended_at is None:
+            raise GuestSessionFinishConflictError
+
+        station = db.scalar(
+            select(Station)
+            .where(
+                Station.id
+                == session_station_id
+            )
+            .with_for_update()
+        )
+
+        if station is None:
+            raise SessionStationNotFoundError
+
+        usage_session = db.scalar(
+            select(UsageSession)
+            .where(
+                UsageSession.id == session_id,
+                UsageSession.session_type
+                == "GUEST",
+            )
+            .with_for_update()
+        )
+
+        if usage_session is None:
+            raise GuestSessionNotFoundError
+
+        if usage_session.status != "ACTIVE":
+            raise UsageSessionAlreadyFinishedError
+
+        consumed_seconds = (
+            _calculate_elapsed_seconds(
+                started_at=(
+                    usage_session.started_at
+                ),
+                ended_at=ended_at,
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                ),
+            )
+        )
+
+        unused_seconds = (
+            usage_session.authorized_seconds
+            - consumed_seconds
+        )
+
+        usage_session.status = "FINISHED"
+
+        usage_session.consumed_seconds = (
+            consumed_seconds
+        )
+
+        usage_session.ended_at = ended_at
+
+        station.status = "AVAILABLE"
+
+        db.flush()
+
+        result = GuestSessionFinishResult(
+            session_id=usage_session.id,
+            station_id=station.id,
+            authorized_seconds=(
+                usage_session.authorized_seconds
+            ),
+            consumed_seconds=(
+                consumed_seconds
+            ),
+            unused_seconds=unused_seconds,
+            session_type=(
+                usage_session.session_type
+            ),
+            session_status=(
+                usage_session.status
+            ),
+            station_status=station.status,
+            started_at=(
+                usage_session.started_at
+            ),
+            ended_at=ended_at,
+        )
+
+        db.commit()
+
+        return result
+
+    except IntegrityError as exc:
+        db.rollback()
+
+        raise GuestSessionFinishConflictError from exc
+
+    except Exception:
+        db.rollback()
+        raise

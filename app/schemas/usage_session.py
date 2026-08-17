@@ -229,3 +229,31 @@ class ActiveGuestSessionResponse(BaseModel):
         "RUNNING",
         "EXHAUSTED",
     ]
+
+
+class GuestSessionFinishResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    session_id: UUID
+    station_id: UUID
+
+    authorized_seconds: int = Field(
+        gt=0,
+    )
+
+    consumed_seconds: int = Field(
+        ge=0,
+    )
+
+    unused_seconds: int = Field(
+        ge=0,
+    )
+
+    session_type: Literal["GUEST"]
+    session_status: Literal["FINISHED"]
+    station_status: Literal["AVAILABLE"]
+
+    started_at: datetime
+    ended_at: datetime

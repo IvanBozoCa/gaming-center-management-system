@@ -5,7 +5,7 @@ from fastapi import (
     status,
 )
 from sqlalchemy.orm import Session
-
+from uuid import UUID
 from app.api.deps import (
     get_db,
     require_admin,
@@ -15,6 +15,7 @@ from app.schemas.usage_session import (
     GuestSessionStartCreate,
     GuestSessionStartResponse,
     ActiveGuestSessionResponse,
+    GuestSessionFinishResponse,
 )
 from app.services.usage_session_service import (
     GuestSessionStartConflictError,
@@ -24,6 +25,10 @@ from app.services.usage_session_service import (
     StationActiveSessionError,
     start_guest_session,
     list_active_guest_sessions,
+    GuestSessionFinishConflictError,
+    GuestSessionNotFoundError,
+    UsageSessionAlreadyFinishedError,
+    finish_guest_session,
 )
 
 
@@ -96,6 +101,57 @@ def create_guest_session(
             status_code=status.HTTP_409_CONFLICT,
             detail="Guest session start conflict",
         ) from exc
+
+
+@router.post(
+    "/{session_id}/finish",
+    response_model=GuestSessionFinishResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Finalizar sesión de invitado",
+    description=(
+        "Finaliza una sesión GUEST activa usando "
+        "el reloj del servidor. El tiempo no "
+        "utilizado se informa como unused_seconds "
+        "y no se acredita a ninguna billetera."
+    ),
+)
+def finish_guest_usage_session(
+    session_id: UUID,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    try:
+        return finish_guest_session(
+            db,
+            session_id=session_id,
+        )
+
+    except GuestSessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Guest session not found",
+        ) from exc
+
+    except UsageSessionAlreadyFinishedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Guest session is already finished"
+            ),
+        ) from exc
+
+    except SessionStationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Guest session station not found",
+        ) from exc
+
+    except GuestSessionFinishConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Guest session finish conflict",
+        ) from exc
+        
 
 
 @router.get(
