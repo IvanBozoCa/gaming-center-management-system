@@ -625,7 +625,9 @@ def list_active_registered_customer_sessions(
             == UsageSession.user_id,
         )
         .where(
-            UsageSession.status == "ACTIVE"
+            UsageSession.status == "ACTIVE",
+            UsageSession.session_type
+            == "REGISTERED",
         )
         .order_by(
             Station.code,
@@ -935,6 +937,107 @@ def list_finished_registered_customer_sessions(
                     usage_session.started_at
                 ),
                 ended_at=ended_at,
+            )
+        )
+
+    return results
+
+@dataclass(frozen=True)
+class ActiveGuestSessionResult:
+    session_id: UUID
+
+    station_id: UUID
+    station_code: str
+
+    authorized_seconds: int
+    started_at: datetime
+
+    elapsed_seconds: int
+    remaining_seconds: int
+    time_state: str
+    
+
+def list_active_guest_sessions(
+    db: Session,
+) -> list[ActiveGuestSessionResult]:
+    server_now = db.scalar(
+        select(
+            func.clock_timestamp()
+        )
+    )
+
+    if server_now is None:
+        return []
+
+    rows = db.execute(
+        select(
+            UsageSession,
+            Station.code,
+        )
+        .join(
+            Station,
+            Station.id
+            == UsageSession.station_id,
+        )
+        .where(
+            UsageSession.status == "ACTIVE",
+            UsageSession.session_type == "GUEST",
+        )
+        .order_by(
+            Station.code,
+            UsageSession.started_at,
+        )
+    ).all()
+
+    results: list[
+        ActiveGuestSessionResult
+    ] = []
+
+    for (
+        usage_session,
+        station_code,
+    ) in rows:
+        elapsed_seconds = (
+            _calculate_elapsed_seconds(
+                started_at=(
+                    usage_session.started_at
+                ),
+                ended_at=server_now,
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                ),
+            )
+        )
+
+        remaining_seconds = (
+            usage_session.authorized_seconds
+            - elapsed_seconds
+        )
+
+        time_state = (
+            "RUNNING"
+            if remaining_seconds > 0
+            else "EXHAUSTED"
+        )
+
+        results.append(
+            ActiveGuestSessionResult(
+                session_id=usage_session.id,
+                station_id=(
+                    usage_session.station_id
+                ),
+                station_code=station_code,
+                authorized_seconds=(
+                    usage_session.authorized_seconds
+                ),
+                started_at=(
+                    usage_session.started_at
+                ),
+                elapsed_seconds=elapsed_seconds,
+                remaining_seconds=(
+                    remaining_seconds
+                ),
+                time_state=time_state,
             )
         )
 

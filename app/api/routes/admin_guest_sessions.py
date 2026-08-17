@@ -14,6 +14,7 @@ from app.models.user import User
 from app.schemas.usage_session import (
     GuestSessionStartCreate,
     GuestSessionStartResponse,
+    ActiveGuestSessionResponse,
 )
 from app.services.usage_session_service import (
     GuestSessionStartConflictError,
@@ -22,6 +23,7 @@ from app.services.usage_session_service import (
     SessionStationUnavailableError,
     StationActiveSessionError,
     start_guest_session,
+    list_active_guest_sessions,
 )
 
 
@@ -94,3 +96,26 @@ def create_guest_session(
             status_code=status.HTTP_409_CONFLICT,
             detail="Guest session start conflict",
         ) from exc
+
+
+@router.get(
+    "/active",
+    response_model=list[
+        ActiveGuestSessionResponse
+    ],
+    status_code=status.HTTP_200_OK,
+    summary="Consultar sesiones guest activas",
+    description=(
+        "Devuelve las sesiones de invitados "
+        "actualmente activas. El tiempo transcurrido "
+        "y restante se calcula usando el reloj del "
+        "servidor y la consulta no modifica datos."
+    ),
+)
+def get_active_guest_sessions(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    return list_active_guest_sessions(
+        db,
+    )

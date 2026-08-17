@@ -201,3 +201,31 @@ class GuestSessionStartResponse(BaseModel):
     station_status: Literal["IN_USE"]
 
     started_at: datetime
+    
+
+class ActiveGuestSessionResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    session_id: UUID
+
+    station_id: UUID
+    station_code: str
+
+    authorized_seconds: int = Field(
+        gt=0,
+    )
+    started_at: datetime
+
+    elapsed_seconds: int = Field(
+        ge=0,
+    )
+    remaining_seconds: int = Field(
+        ge=0,
+    )
+
+    time_state: Literal[
+        "RUNNING",
+        "EXHAUSTED",
+    ]
