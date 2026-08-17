@@ -276,7 +276,17 @@ export function StationsPage() {
             {isRefreshing ? "Actualizando..." : "Actualizar"}
           </button>
         </div>
+        {statusError && (
+          <p className="form-error" role="alert">
+            {statusError}
+          </p>
+        )}
 
+        {statusSuccess && (
+          <p className="form-success" role="status">
+            {statusSuccess}
+          </p>
+        )}
         {error && (
           <p className="form-error" role="alert">
             {error}
