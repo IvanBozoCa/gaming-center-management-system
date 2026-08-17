@@ -257,3 +257,27 @@ class GuestSessionFinishResponse(BaseModel):
 
     started_at: datetime
     ended_at: datetime
+    
+
+class FinishedGuestSessionHistoryResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    session_id: UUID
+
+    station_id: UUID
+    station_code: str
+
+    authorized_seconds: int = Field(
+        gt=0,
+    )
+    consumed_seconds: int = Field(
+        ge=0,
+    )
+    unused_seconds: int = Field(
+        ge=0,
+    )
+
+    started_at: datetime
+    ended_at: datetime
