@@ -1,26 +1,93 @@
-import { config } from "../lib/config";
+import {
+  Navigate,
+  Route,
+  Routes,
+} from "react-router";
+
+import { AdminLayout } from "./layouts/AdminLayout";
+import { LoginPage } from "./pages/LoginPage";
+import { PlaceholderPage } from "./pages/PlaceholderPage";
 
 export function App() {
   return (
-    <main className="app-shell">
-      <section className="welcome-card">
-        <p className="eyebrow">
-          GCMS Admin
-        </p>
+    <Routes>
+      <Route
+        path="/login"
+        element={<LoginPage />}
+      />
 
-        <h1>
-          Gaming Center Management System
-        </h1>
+      <Route element={<AdminLayout />}>
+        <Route
+          path="/customers"
+          element={
+            <PlaceholderPage
+              title="Clientes"
+              description={
+                "Gestión de clientes, "
+                + "wallet e historial."
+              }
+            />
+          }
+        />
 
-        <p>
-          Frontend administrativo preparado
-          para conectarse al backend.
-        </p>
+        <Route
+          path="/stations"
+          element={
+            <PlaceholderPage
+              title="Estaciones"
+              description={
+                "Administración de los "
+                + "equipos del gaming center."
+              }
+            />
+          }
+        />
 
-        <p className="api-info">
-          API: {config.apiBaseUrl}
-        </p>
-      </section>
-    </main>
+        <Route
+          path="/sessions"
+          element={
+            <PlaceholderPage
+              title="Sesiones"
+              description={
+                "Sesiones de clientes "
+                + "registrados."
+              }
+            />
+          }
+        />
+
+        <Route
+          path="/guest-sessions"
+          element={
+            <PlaceholderPage
+              title="Invitados"
+              description={
+                "Sesiones temporales GUEST."
+              }
+            />
+          }
+        />
+      </Route>
+
+      <Route
+        path="/"
+        element={
+          <Navigate
+            to="/customers"
+            replace
+          />
+        }
+      />
+
+      <Route
+        path="*"
+        element={
+          <PlaceholderPage
+            title="404"
+            description="Página no encontrada."
+          />
+        }
+      />
+    </Routes>
   );
 }
