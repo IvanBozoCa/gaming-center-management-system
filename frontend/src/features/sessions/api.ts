@@ -3,6 +3,9 @@ import { apiRequest } from "../../lib/http";
 
 import type {
   ActiveRegisteredSession,
+  ExtendRegisteredSessionInput,
+  RegisteredSessionExtensionResponse,
+  RegisteredSessionFinishResponse,
   RegisteredSessionStartResponse,
   StartRegisteredSessionInput,
 } from "./types";
@@ -36,4 +39,33 @@ export function startRegisteredSession(
     },
     body: JSON.stringify(data),
   });
+}
+
+export function extendRegisteredSession(
+  sessionId: string,
+  data: ExtendRegisteredSessionInput,
+): Promise<RegisteredSessionExtensionResponse> {
+  return apiRequest<RegisteredSessionExtensionResponse>(
+    `/admin/sessions/${sessionId}/extend`,
+    {
+      method: "POST",
+      token: requireAccessToken(),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export function finishRegisteredSession(
+  sessionId: string,
+): Promise<RegisteredSessionFinishResponse> {
+  return apiRequest<RegisteredSessionFinishResponse>(
+    `/admin/sessions/${sessionId}/finish`,
+    {
+      method: "POST",
+      token: requireAccessToken(),
+    },
+  );
 }

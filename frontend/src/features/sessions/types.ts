@@ -37,3 +37,41 @@ export interface RegisteredSessionStartResponse {
   station_status: "IN_USE";
   started_at: string;
 }
+
+export interface ExtendRegisteredSessionInput {
+  additional_seconds: number;
+}
+
+export interface RegisteredSessionExtensionResponse {
+  session_id: string;
+  station_id: string;
+  customer_id: string;
+
+  additional_seconds: number;
+  authorized_seconds: number;
+
+  available_seconds: number;
+  reserved_seconds: number;
+
+  session_status: "ACTIVE";
+  started_at: string;
+}
+
+export interface RegisteredSessionFinishResponse {
+  session_id: string;
+  station_id: string;
+  customer_id: string;
+
+  authorized_seconds: number;
+  consumed_seconds: number;
+  released_seconds: number;
+
+  available_seconds: number;
+  reserved_seconds: number;
+
+  session_status: "FINISHED";
+  station_status: "AVAILABLE";
+
+  started_at: string;
+  ended_at: string;
+}

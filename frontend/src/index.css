@@ -604,3 +604,45 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.registered-session-actions {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 270px;
+}
+
+.session-extension-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 90px;
+}
+
+.session-extension-field span {
+  color: #9da9bc;
+  font-size: 0.75rem;
+}
+
+.session-extension-field input {
+  width: 100%;
+}
+
+.danger-button {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #63323b;
+  border-radius: 8px;
+  color: #ffd5dc;
+  background: #3b1d24;
+  cursor: pointer;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #512730;
+}
+
+.danger-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import {
+  extendRegisteredSession,
+  finishRegisteredSession,
   listActiveRegisteredSessions,
   startRegisteredSession,
 } from "../../features/sessions/api";
@@ -26,6 +28,66 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("es-CL");
 }
 
+function getExtensionErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return "No fue posible extender la sesión.";
+  }
+
+  if (error.status === 404) {
+    return "La sesión ya no existe.";
+  }
+
+  if (error.status === 422) {
+    return "El tiempo adicional debe ser mayor que cero.";
+  }
+
+  if (error.status === 409 && error.message === "Insufficient time balance") {
+    return "El cliente no tiene saldo suficiente para esa extensión.";
+  }
+
+  if (
+    error.status === 409 &&
+    error.message === "Usage session is already finished"
+  ) {
+    return "La sesión ya fue finalizada.";
+  }
+
+  if (error.status === 409) {
+    return "No fue posible extender la sesión por un conflicto de estado.";
+  }
+
+  return "No fue posible extender la sesión.";
+}
+
+function getFinishErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return "No fue posible finalizar la sesión.";
+  }
+
+  if (error.status === 404) {
+    return "La sesión ya no existe.";
+  }
+
+  if (
+    error.status === 409 &&
+    error.message === "Usage session is already finished"
+  ) {
+    return "La sesión ya fue finalizada.";
+  }
+
+  if (
+    error.status === 409 &&
+    error.message === "Session reservation is inconsistent"
+  ) {
+    return "La reserva de tiempo de la sesión es inconsistente.";
+  }
+
+  if (error.status === 409) {
+    return "No fue posible finalizar la sesión por un conflicto de estado.";
+  }
+
+  return "No fue posible finalizar la sesión.";
+}
 export function SessionsPage() {
   const [sessions, setSessions] = useState<ActiveRegisteredSession[]>([]);
 
@@ -47,6 +109,16 @@ export function SessionsPage() {
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [startSuccess, setStartSuccess] = useState<string | null>(null);
+
+  const [extensionMinutes, setExtensionMinutes] = useState<
+    Record<string, string>
+  >({});
+
+  const [sessionActionId, setSessionActionId] = useState<string | null>(null);
+
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   const loadSessions = useCallback(
     async (showFullLoading = true): Promise<boolean> => {
@@ -222,6 +294,102 @@ export function SessionsPage() {
       setIsStarting(false);
     }
   }
+  async function handleExtendSession(session: ActiveRegisteredSession) {
+    const rawMinutes = extensionMinutes[session.session_id] ?? "";
+    const minutes = Number(rawMinutes);
+
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      setActionError("Ingresa una cantidad de minutos mayor que cero.");
+      return;
+    }
+
+    const additionalSeconds = Math.floor(minutes * 60);
+
+    setSessionActionId(session.session_id);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const extendedSession = await extendRegisteredSession(
+        session.session_id,
+        {
+          additional_seconds: additionalSeconds,
+        },
+      );
+
+      setExtensionMinutes((current) => ({
+        ...current,
+        [session.session_id]: "",
+      }));
+
+      const [sessionsUpdated, optionsUpdated] = await Promise.all([
+        loadSessions(false),
+        loadStartOptions(),
+      ]);
+
+      if (sessionsUpdated && optionsUpdated) {
+        setActionSuccess(
+          `${session.station_code} recibió ${formatDuration(
+            extendedSession.additional_seconds,
+          )} adicionales.`,
+        );
+      } else {
+        setActionSuccess(
+          "El tiempo fue extendido, pero no fue posible actualizar toda la pantalla.",
+        );
+      }
+    } catch (error) {
+      setActionError(getExtensionErrorMessage(error));
+    } finally {
+      setSessionActionId(null);
+    }
+  }
+  async function handleFinishSession(session: ActiveRegisteredSession) {
+    const confirmed = window.confirm(
+      `¿Finalizar la sesión de ${session.customer_display_name} en ${session.station_code}?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSessionActionId(session.session_id);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const finishedSession = await finishRegisteredSession(session.session_id);
+
+      setSessions((currentSessions) =>
+        currentSessions.filter(
+          (currentSession) => currentSession.session_id !== session.session_id,
+        ),
+      );
+
+      setExtensionMinutes((current) => {
+        const next = { ...current };
+        delete next[session.session_id];
+
+        return next;
+      });
+
+      const optionsUpdated = await loadStartOptions();
+
+      setActionSuccess(
+        optionsUpdated
+          ? `${session.station_code} finalizada: ${formatDuration(
+              finishedSession.consumed_seconds,
+            )} consumidos y ${formatDuration(
+              finishedSession.released_seconds,
+            )} devueltos.`
+          : "La sesión fue finalizada, pero no fue posible actualizar clientes y estaciones.",
+      );
+    } catch (error) {
+      setActionError(getFinishErrorMessage(error));
+    } finally {
+      setSessionActionId(null);
+    }
+  }
 
   return (
     <section className="sessions-page">
@@ -352,6 +520,17 @@ export function SessionsPage() {
             {isRefreshing ? "Actualizando..." : "Actualizar"}
           </button>
         </div>
+        {actionError && (
+          <p className="form-error" role="alert">
+            {actionError}
+          </p>
+        )}
+
+        {actionSuccess && (
+          <p className="form-success" role="status">
+            {actionSuccess}
+          </p>
+        )}
 
         {feedback && (
           <p className="form-success" role="status">
@@ -386,6 +565,7 @@ export function SessionsPage() {
                     <th>Transcurrido</th>
                     <th>Restante</th>
                     <th>Inicio</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
 
@@ -426,6 +606,48 @@ export function SessionsPage() {
                       </td>
 
                       <td>{formatDateTime(session.started_at)}</td>
+                      <td>
+                        <div className="registered-session-actions">
+                          <label className="session-extension-field">
+                            <span>Agregar min</span>
+
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={extensionMinutes[session.session_id] ?? ""}
+                              onChange={(event) =>
+                                setExtensionMinutes((current) => ({
+                                  ...current,
+                                  [session.session_id]: event.target.value,
+                                }))
+                              }
+                              placeholder="30"
+                              disabled={sessionActionId === session.session_id}
+                            />
+                          </label>
+
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={sessionActionId === session.session_id}
+                            onClick={() => void handleExtendSession(session)}
+                          >
+                            {sessionActionId === session.session_id
+                              ? "Procesando..."
+                              : "Extender"}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="danger-button"
+                            disabled={sessionActionId === session.session_id}
+                            onClick={() => void handleFinishSession(session)}
+                          >
+                            Finalizar
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
