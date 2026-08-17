@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
-import { createStation, listStations } from "../../features/stations/api";
-import type { Station, StationStatus } from "../../features/stations/types";
+import {
+  createStation,
+  listStations,
+  updateStationStatus,
+} from "../../features/stations/api";
+import type {
+  Station,
+  StationStatus,
+  AdminStationStatus,
+} from "../../features/stations/types";
 import { ApiError } from "../../lib/http";
 
 const statusLabels: Record<StationStatus, string> = {
@@ -10,6 +18,24 @@ const statusLabels: Record<StationStatus, string> = {
   MAINTENANCE: "Mantenimiento",
   OFFLINE: "Fuera de línea",
 };
+
+const adminStatusOptions: {
+  value: AdminStationStatus;
+  label: string;
+}[] = [
+  {
+    value: "AVAILABLE",
+    label: "Disponible",
+  },
+  {
+    value: "MAINTENANCE",
+    label: "Mantenimiento",
+  },
+  {
+    value: "OFFLINE",
+    label: "Fuera de línea",
+  },
+];
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("es-CL");
@@ -21,6 +47,11 @@ export function StationsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [updatingStationId, setUpdatingStationId] = useState<string | null>(
+    null,
+  );
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusSuccess, setStatusSuccess] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -85,6 +116,48 @@ export function StationsPage() {
       }
     } finally {
       setIsCreating(false);
+    }
+  }
+  async function handleStatusChange(
+    station: Station,
+    newStatus: AdminStationStatus,
+  ) {
+    if (station.status === newStatus) {
+      return;
+    }
+
+    setUpdatingStationId(station.id);
+    setStatusError(null);
+    setStatusSuccess(null);
+
+    try {
+      const updatedStation = await updateStationStatus(station.id, newStatus);
+
+      setStations((currentStations) =>
+        currentStations.map((currentStation) =>
+          currentStation.id === updatedStation.id
+            ? updatedStation
+            : currentStation,
+        ),
+      );
+
+      setStatusSuccess(
+        `${updatedStation.code} cambió a ${statusLabels[updatedStation.status]}.`,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        setStatusError("La estación ya no existe. Actualiza el listado.");
+      } else if (error instanceof ApiError && error.status === 409) {
+        setStatusError(
+          "No se puede cambiar el estado porque la estación está en uso.",
+        );
+      } else if (error instanceof ApiError && error.status === 422) {
+        setStatusError("Ese estado no se puede asignar manualmente.");
+      } else {
+        setStatusError("No fue posible cambiar el estado de la estación.");
+      }
+    } finally {
+      setUpdatingStationId(null);
     }
   }
 
@@ -155,6 +228,17 @@ export function StationsPage() {
 
       <section className="stations-list-section">
         <div className="section-header">
+          {statusError && (
+            <p className="form-error" role="alert">
+              {statusError}
+            </p>
+          )}
+
+          {statusSuccess && (
+            <p className="form-success" role="status">
+              {statusSuccess}
+            </p>
+          )}
           <div>
             <h2>Equipos registrados</h2>
 
@@ -190,6 +274,7 @@ export function StationsPage() {
                     <th>Estado</th>
                     <th>Registrada</th>
                     <th>Última actualización</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
 
@@ -211,6 +296,32 @@ export function StationsPage() {
                       <td>{formatDateTime(station.created_at)}</td>
 
                       <td>{formatDateTime(station.updated_at)}</td>
+                      <td>
+                        {station.status === "IN_USE" ? (
+                          <span className="station-managed-message">
+                            Administrada por sesión
+                          </span>
+                        ) : (
+                          <div className="station-actions">
+                            {adminStatusOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className="station-action-button"
+                                disabled={
+                                  updatingStationId === station.id ||
+                                  station.status === option.value
+                                }
+                                onClick={() =>
+                                  void handleStatusChange(station, option.value)
+                                }
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

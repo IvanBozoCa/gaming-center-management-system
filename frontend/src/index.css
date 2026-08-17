@@ -493,3 +493,32 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.station-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.station-action-button {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #34415a;
+  border-radius: 7px;
+  color: #dce3ef;
+  background: #172238;
+  cursor: pointer;
+}
+
+.station-action-button:hover:not(:disabled) {
+  background: #22314f;
+}
+
+.station-action-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.station-managed-message {
+  color: #9da9bc;
+  font-size: 0.85rem;
+}

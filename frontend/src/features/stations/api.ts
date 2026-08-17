@@ -1,7 +1,6 @@
 import { getAccessToken } from "../auth/storage";
 import { apiRequest } from "../../lib/http";
-
-import type { CreateStationInput, Station } from "./types";
+import type { AdminStationStatus, CreateStationInput, Station } from "./types";
 
 function requireAccessToken(): string {
   const token = getAccessToken();
@@ -27,5 +26,19 @@ export function createStation(data: CreateStationInput): Promise<Station> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
+  });
+}
+
+export function updateStationStatus(
+  stationId: string,
+  status: AdminStationStatus,
+): Promise<Station> {
+  return apiRequest<Station>(`/admin/stations/${stationId}/status`, {
+    method: "PATCH",
+    token: requireAccessToken(),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status }),
   });
 }
