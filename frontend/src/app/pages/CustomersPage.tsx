@@ -4,7 +4,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-
+import { Link } from "react-router";
 import { listCustomers } from "../../features/customers/api";
 import type { CustomerSummary } from "../../features/customers/types";
 import { formatDuration } from "../../lib/time";
@@ -189,6 +189,7 @@ export function CustomersPage() {
                   <th>Disponible</th>
                   <th>Reservado</th>
                   <th>Registro</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
 
@@ -240,6 +241,14 @@ export function CustomersPage() {
                           customer.created_at,
                         )}
                       </td>
+                      <td>
+                        <Link
+                            className="table-link"
+                            to={`/customers/${customer.id}`}
+                            >
+                            Ver detalle
+                        </Link>
+                      </td>                     
                     </tr>
                   ),
                 )}

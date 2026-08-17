@@ -27,3 +27,17 @@ export function formatDuration(
 
   return `${remainingSeconds} s`;
 }
+
+export function formatSignedDuration(
+  totalSeconds: number,
+): string {
+  if (totalSeconds === 0) {
+    return "0 s";
+  }
+
+  const sign = totalSeconds > 0 ? "+" : "-";
+
+  return `${sign}${formatDuration(
+    Math.abs(totalSeconds),
+  )}`;
+}

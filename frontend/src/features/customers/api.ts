@@ -2,8 +2,11 @@ import { getAccessToken } from "../auth/storage";
 import { apiRequest } from "../../lib/http";
 
 import type {
+  CustomerDetail,
   CustomerSummary,
   ListCustomersParams,
+  TimeTransaction,
+  TimeWallet,
 } from "./types";
 
 function requireAccessToken(): string {
@@ -46,6 +49,46 @@ export function listCustomers(
 
   return apiRequest<CustomerSummary[]>(
     `/admin/customers?${searchParams.toString()}`,
+    {
+      token: requireAccessToken(),
+    },
+  );
+}
+
+export function getCustomer(
+  customerId: string,
+): Promise<CustomerDetail> {
+  return apiRequest<CustomerDetail>(
+    `/admin/customers/${customerId}`,
+    {
+      token: requireAccessToken(),
+    },
+  );
+}
+
+export function getCustomerWallet(
+  customerId: string,
+): Promise<TimeWallet> {
+  return apiRequest<TimeWallet>(
+    `/admin/customers/${customerId}/wallet`,
+    {
+      token: requireAccessToken(),
+    },
+  );
+}
+
+export function listCustomerTransactions(
+  customerId: string,
+  limit = 20,
+  offset = 0,
+): Promise<TimeTransaction[]> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  return apiRequest<TimeTransaction[]>(
+    `/admin/customers/${customerId}/time-transactions?${params.toString()}`,
     {
       token: requireAccessToken(),
     },
