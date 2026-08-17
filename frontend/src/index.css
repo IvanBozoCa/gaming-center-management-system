@@ -522,3 +522,17 @@ textarea {
   color: #9da9bc;
   font-size: 0.85rem;
 }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+@media (max-width: 700px) {
+  .section-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

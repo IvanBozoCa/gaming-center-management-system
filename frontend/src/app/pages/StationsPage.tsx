@@ -56,20 +56,32 @@ export function StationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const loadStations = useCallback(
+    async (showFullLoading = true): Promise<boolean> => {
+      if (showFullLoading) {
+        setIsLoading(true);
+      }
 
-  const loadStations = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+      setError(null);
 
-    try {
-      const data = await listStations();
-      setStations(data);
-    } catch {
-      setError("No fue posible cargar las estaciones.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+      try {
+        const data = await listStations();
+        setStations(data);
+
+        return true;
+      } catch {
+        setError("No fue posible cargar las estaciones.");
+
+        return false;
+      } finally {
+        if (showFullLoading) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void loadStations();
@@ -105,7 +117,13 @@ export function StationsPage() {
         `Estación ${createdStation.code} registrada correctamente.`,
       );
 
-      await loadStations();
+      const refreshed = await loadStations(false);
+
+      if (!refreshed) {
+        setCreateSuccess(
+          `Estación ${createdStation.code} registrada, pero no fue posible actualizar el listado.`,
+        );
+      }
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         setCreateError("Ya existe una estación con ese código.");
@@ -117,6 +135,19 @@ export function StationsPage() {
     } finally {
       setIsCreating(false);
     }
+  }
+  async function handleRefreshStations() {
+    setIsRefreshing(true);
+    setStatusError(null);
+    setStatusSuccess(null);
+
+    const success = await loadStations(false);
+
+    if (success) {
+      setStatusSuccess("Listado de estaciones actualizado.");
+    }
+
+    setIsRefreshing(false);
   }
   async function handleStatusChange(
     station: Station,
@@ -228,17 +259,6 @@ export function StationsPage() {
 
       <section className="stations-list-section">
         <div className="section-header">
-          {statusError && (
-            <p className="form-error" role="alert">
-              {statusError}
-            </p>
-          )}
-
-          {statusSuccess && (
-            <p className="form-success" role="status">
-              {statusSuccess}
-            </p>
-          )}
           <div>
             <h2>Equipos registrados</h2>
 
@@ -246,6 +266,15 @@ export function StationsPage() {
               Estado operativo actual de las estaciones.
             </p>
           </div>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void handleRefreshStations()}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? "Actualizando..." : "Actualizar"}
+          </button>
         </div>
 
         {error && (
