@@ -439,9 +439,14 @@ def finish_registered_customer_session(
 ) -> SessionFinishResult:
     try:
         session_station_id = db.scalar(
-            select(UsageSession.station_id).where(
-                UsageSession.id == session_id
-        ))
+            select(
+                UsageSession.station_id
+            ).where(
+                UsageSession.id == session_id,
+                UsageSession.session_type
+                == "REGISTERED",
+            )
+        )
 
         if session_station_id is None:
             raise UsageSessionNotFoundError
@@ -469,10 +474,12 @@ def finish_registered_customer_session(
         usage_session = db.scalar(
             select(UsageSession)
             .where(
-                UsageSession.id == session_id
+                UsageSession.id == session_id,
+                UsageSession.session_type
+                == "REGISTERED",
             )
             .with_for_update()
-        )
+        )       
 
         if usage_session is None:
             raise UsageSessionNotFoundError
@@ -737,7 +744,9 @@ def extend_registered_customer_session(
         usage_session = db.scalar(
             select(UsageSession)
             .where(
-                UsageSession.id == session_id
+                UsageSession.id == session_id,
+                UsageSession.session_type
+                == "REGISTERED",
             )
             .with_for_update()
         )
@@ -857,8 +866,10 @@ def list_finished_registered_customer_sessions(
             == UsageSession.user_id,
         )
         .where(
-            UsageSession.status == "FINISHED"
-        )
+            UsageSession.status == "FINISHED",
+            UsageSession.session_type
+            == "REGISTERED",
+        )   
     )
 
     if customer_id is not None:
