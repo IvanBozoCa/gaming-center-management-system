@@ -4,17 +4,13 @@ interface ApiErrorPayload {
   detail?: string;
 }
 
-interface ApiRequestOptions
-  extends RequestInit {
+interface ApiRequestOptions extends RequestInit {
   token?: string;
 }
 
+type UnauthorizedHandler = () => void;
 
-type UnauthorizedHandler =
-  () => void;
-
-let unauthorizedHandler:
-  UnauthorizedHandler | null = null;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
 
 export function setUnauthorizedHandler(
   handler: UnauthorizedHandler | null,
@@ -22,16 +18,11 @@ export function setUnauthorizedHandler(
   unauthorizedHandler = handler;
 }
 
-
 export class ApiError extends Error {
   readonly status: number;
 
-  constructor(
-    status: number,
-    message: string,
-  ) {
+  constructor(status: number, message: string) {
     super(message);
-
     this.name = "ApiError";
     this.status = status;
   }
@@ -41,67 +32,43 @@ export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const {
-    token,
-    headers,
-    ...requestOptions
-  } = options;
+  const { token, headers, ...requestOptions } = options;
+  const requestHeaders = new Headers(headers);
 
-  const requestHeaders =
-    new Headers(headers);
-
-  requestHeaders.set(
-    "Accept",
-    "application/json",
-  );
+  requestHeaders.set("Accept", "application/json");
 
   if (token) {
-    requestHeaders.set(
-      "Authorization",
-      `Bearer ${token}`,
-    );
+    requestHeaders.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(
-    `${config.apiBaseUrl}${path}`,
-    {
-      ...requestOptions,
-      headers: requestHeaders,
-    },
-  );
-  
+  const response = await fetch(`${config.apiBaseUrl}${path}`, {
+    ...requestOptions,
+    headers: requestHeaders,
+  });
+
   if (response.status === 401) {
     unauthorizedHandler?.();
   }
 
   if (!response.ok) {
-    let message =
-      `Request failed with status `
-      + response.status;
+    let message = `Request failed with status ${response.status}`;
 
     try {
-      const payload =
-        await response.json() as ApiErrorPayload;
+      const payload = (await response.json()) as ApiErrorPayload;
 
-      if (
-        typeof payload.detail
-        === "string"
-      ) {
+      if (typeof payload.detail === "string") {
         message = payload.detail;
       }
     } catch {
       // Response without JSON body.
     }
 
-    throw new ApiError(
-      response.status,
-      message,
-    );
+    throw new ApiError(response.status, message);
   }
 
   if (response.status === 204) {
     return undefined as T;
   }
 
-  return await response.json() as T;
+  return (await response.json()) as T;
 }

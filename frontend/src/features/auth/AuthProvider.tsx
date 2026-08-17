@@ -5,75 +5,48 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  getCurrentUser,
-} from "./api";
-import {
-  AuthContext,
-} from "./context";
+import { setUnauthorizedHandler } from "../../lib/http";
+import { getCurrentUser } from "./api";
+import { AuthContext } from "./context";
 import {
   clearAccessToken,
   getAccessToken,
   setAccessToken,
 } from "./storage";
-import type {
-  CurrentUserResponse,
-} from "./types";
-import {
-  setUnauthorizedHandler,
-} from "../../lib/http";
+import type { CurrentUserResponse } from "./types";
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-export function AuthProvider({
-  children,
-}: AuthProviderProps) {
-  const [user, setUser] =
-    useState<CurrentUserResponse | null>(
-      null,
-    );
-
-  const [isLoading, setIsLoading] =
-    useState(true);
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [user, setUser] = useState<CurrentUserResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const logout = useCallback(() => {
     clearAccessToken();
     setUser(null);
   }, []);
 
-  const establishSession =
-    useCallback(
-      async (token: string) => {
-        setAccessToken(token);
+  const establishSession = useCallback(async (token: string) => {
+    setAccessToken(token);
 
-        try {
-          const currentUser =
-            await getCurrentUser(token);
+    try {
+      const currentUser = await getCurrentUser(token);
 
-          if (
-            currentUser.role !== "ADMIN"
-            || !currentUser.is_active
-          ) {
-            clearAccessToken();
-            setUser(null);
+      if (currentUser.role !== "ADMIN" || !currentUser.is_active) {
+        clearAccessToken();
+        setUser(null);
+        throw new Error("ADMIN_ROLE_REQUIRED");
+      }
 
-            throw new Error(
-              "ADMIN_ROLE_REQUIRED",
-            );
-          }
-
-          setUser(currentUser);
-        } catch (error) {
-          clearAccessToken();
-          setUser(null);
-
-          throw error;
-        }
-      },
-      [],
-    );
+      setUser(currentUser);
+    } catch (error) {
+      clearAccessToken();
+      setUser(null);
+      throw error;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,29 +54,23 @@ export function AuthProvider({
     setUnauthorizedHandler(logout);
 
     async function restoreSession() {
-      const token =
-        getAccessToken();
+      const token = getAccessToken();
 
       if (!token) {
         if (!cancelled) {
           setIsLoading(false);
         }
-
         return;
       }
 
       try {
-        const currentUser =
-          await getCurrentUser(token);
+        const currentUser = await getCurrentUser(token);
 
         if (cancelled) {
           return;
         }
 
-        if (
-          currentUser.role !== "ADMIN"
-          || !currentUser.is_active
-        ) {
+        if (currentUser.role !== "ADMIN" || !currentUser.is_active) {
           logout();
           return;
         }
@@ -130,12 +97,7 @@ export function AuthProvider({
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        establishSession,
-        logout,
-      }}
+      value={{ user, isLoading, establishSession, logout }}
     >
       {children}
     </AuthContext.Provider>

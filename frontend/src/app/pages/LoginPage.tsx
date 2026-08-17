@@ -1,56 +1,30 @@
-import {
-  useState,
-  type FormEvent,
-} from "react";
-import { useNavigate,Navigate, } from "react-router";
-
-import {  useAuth, } from "../../features/auth/useAuth";
+import { useState, type FormEvent } from "react";
+import { Navigate, useNavigate } from "react-router";
 
 import { login } from "../../features/auth/api";
-
+import { useAuth } from "../../features/auth/useAuth";
 import { ApiError } from "../../lib/http";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { user, establishSession, } = useAuth();
+  const { user, establishSession } = useAuth();
 
-  const [username, setUsername] =
-    useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [password, setPassword] =
-    useState("");
-
-  const [isSubmitting, setIsSubmitting] =
-    useState(false);
-
-  const [error, setError] =
-    useState<string | null>(null);
-  
   if (user?.role === "ADMIN") {
-  return (
-    <Navigate
-      to="/customers"
-      replace
-    />
-  );
-}
+    return <Navigate to="/customers" replace />;
+  }
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const normalizedUsername =
-      username.trim();
+    const normalizedUsername = username.trim();
 
-    if (
-      !normalizedUsername
-      || !password
-    ) {
-      setError(
-        "Ingresa usuario y contraseña.",
-      );
-
+    if (!normalizedUsername || !password) {
+      setError("Ingresa usuario y contraseña.");
       return;
     }
 
@@ -63,26 +37,13 @@ export function LoginPage() {
         password,
       });
 
-      await establishSession( response.access_token, );
-
-      navigate(
-        "/customers",
-        {
-          replace: true,
-        },
-      );
+      await establishSession(response.access_token);
+      navigate("/customers", { replace: true });
     } catch (error) {
-      if (
-        error instanceof ApiError
-        && error.status === 401
-      ) {
-        setError(
-          "Usuario o contraseña incorrectos.",
-        );
+      if (error instanceof ApiError && error.status === 401) {
+        setError("Usuario o contraseña incorrectos.");
       } else {
-        setError(
-          "No fue posible iniciar sesión.",
-        );
+        setError("No fue posible iniciar sesión.");
       }
     } finally {
       setIsSubmitting(false);
@@ -93,65 +54,38 @@ export function LoginPage() {
     <main className="login-page">
       <section className="login-card">
         <div>
-          <p className="eyebrow">
-            GCMS Admin
-          </p>
-
-          <h1>
-            Iniciar sesión
-          </h1>
-
+          <p className="eyebrow">GCMS Admin</p>
+          <h1>Iniciar sesión</h1>
           <p className="login-description">
-            Accede al panel administrativo
-            del gaming center.
+            Accede al panel administrativo del gaming center.
           </p>
         </div>
 
-        <form
-          className="login-form"
-          onSubmit={handleSubmit}
-        >
+        <form className="login-form" onSubmit={handleSubmit}>
           <label className="form-field">
-            <span>
-              Usuario
-            </span>
-
+            <span>Usuario</span>
             <input
               type="text"
               value={username}
-              onChange={(event) =>
-                setUsername(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
               disabled={isSubmitting}
             />
           </label>
 
           <label className="form-field">
-            <span>
-              Contraseña
-            </span>
-
+            <span>Contraseña</span>
             <input
               type="password"
               value={password}
-              onChange={(event) =>
-                setPassword(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
               disabled={isSubmitting}
             />
           </label>
 
           {error && (
-            <p
-              className="form-error"
-              role="alert"
-            >
+            <p className="form-error" role="alert">
               {error}
             </p>
           )}
@@ -161,9 +95,7 @@ export function LoginPage() {
             type="submit"
             disabled={isSubmitting}
           >
-            {isSubmitting
-              ? "Ingresando..."
-              : "Ingresar"}
+            {isSubmitting ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
       </section>

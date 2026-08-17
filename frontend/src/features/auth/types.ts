@@ -3,9 +3,7 @@ export interface TokenResponse {
   token_type: string;
 }
 
-export type UserRole =
-  | "ADMIN"
-  | "CUSTOMER";
+export type UserRole = "ADMIN" | "CUSTOMER";
 
 export interface CurrentUserResponse {
   id: string;
