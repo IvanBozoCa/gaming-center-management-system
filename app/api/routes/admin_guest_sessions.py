@@ -2,6 +2,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     status,
 )
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from app.schemas.usage_session import (
     GuestSessionStartResponse,
     ActiveGuestSessionResponse,
     GuestSessionFinishResponse,
+    FinishedGuestSessionHistoryResponse,
 )
 from app.services.usage_session_service import (
     GuestSessionStartConflictError,
@@ -29,6 +31,7 @@ from app.services.usage_session_service import (
     GuestSessionNotFoundError,
     UsageSessionAlreadyFinishedError,
     finish_guest_session,
+    list_finished_guest_sessions,
 )
 
 
@@ -174,4 +177,43 @@ def get_active_guest_sessions(
 ):
     return list_active_guest_sessions(
         db,
+    )
+
+@router.get(
+    "/history",
+    response_model=list[
+        FinishedGuestSessionHistoryResponse
+    ],
+    status_code=status.HTTP_200_OK,
+    summary="Consultar historial de sesiones guest",
+    description=(
+        "Devuelve únicamente sesiones GUEST "
+        "finalizadas, ordenadas desde el cierre "
+        "más reciente al más antiguo por ended_at "
+        "DESC e id DESC. Permite filtrar "
+        "opcionalmente por estación. La operación "
+        "es exclusivamente de lectura."
+    ),
+)
+def get_guest_session_history(
+    station_id: UUID | None = Query(
+        default=None,
+    ),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+    ),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    return list_finished_guest_sessions(
+        db,
+        station_id=station_id,
+        limit=limit,
+        offset=offset,
     )
