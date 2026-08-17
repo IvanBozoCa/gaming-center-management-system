@@ -132,15 +132,11 @@ textarea {
 }
 
 .login-card h1 {
-  margin:
-    0.75rem 0
-    0.5rem;
+  margin: 0.75rem 0 0.5rem;
 }
 
 .login-description {
-  margin:
-    0 0
-    2rem;
+  margin: 0 0 2rem;
   color: #9da9bc;
 }
 
@@ -246,4 +242,192 @@ textarea {
   display: grid;
   place-items: center;
   color: #9da9bc;
+}
+
+.customers-page {
+  width: min(1200px, 100%);
+}
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  margin: 0.5rem 0;
+}
+
+.page-description {
+  margin: 0;
+  color: #9da9bc;
+}
+
+.customer-filters {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1fr)
+    180px
+    auto;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.customer-filters input,
+.customer-filters select {
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #34415a;
+  border-radius: 8px;
+  color: #e7e9ee;
+  background: #0b1220;
+}
+
+.customer-filters input:focus,
+.customer-filters select:focus {
+  outline: none;
+  border-color: #7182a3;
+}
+
+.content-state {
+  padding: 2rem;
+  border: 1px solid #253047;
+  border-radius: 12px;
+  color: #9da9bc;
+  text-align: center;
+  background: #111a2b;
+}
+
+.results-count {
+  margin-bottom: 0.75rem;
+  color: #9da9bc;
+  font-size: 0.9rem;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #253047;
+  border-radius: 12px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #111a2b;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #253047;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.data-table th {
+  color: #9da9bc;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-table tbody tr:hover {
+  background: #172238;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.status-badge.active {
+  color: #bdf5ce;
+  background: #173524;
+}
+
+.status-badge.inactive {
+  color: #ffccd5;
+  background: #35191f;
+}
+
+@media (max-width: 700px) {
+  .customer-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+.time-purchase-section {
+  margin-bottom: 2.5rem;
+  padding: 1.25rem;
+  border: 1px solid #253047;
+  border-radius: 12px;
+  background: #111a2b;
+}
+
+.time-purchase-form {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 280px)
+    auto;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.time-purchase-form .primary-button {
+  margin-top: 0;
+}
+
+.form-success {
+  margin: 1rem 0 0;
+  padding: 0.75rem;
+  border: 1px solid #2c6840;
+  border-radius: 8px;
+  color: #bdf5ce;
+  background: #173524;
+}
+
+@media (max-width: 700px) {
+  .time-purchase-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.customer-registration-section {
+  margin-bottom: 2rem;
+  padding: 1.25rem;
+  border: 1px solid #253047;
+  border-radius: 12px;
+  background: #111a2b;
+}
+
+.customer-registration-form {
+  display: grid;
+  grid-template-columns:
+    minmax(160px, 1fr)
+    minmax(200px, 1.5fr)
+    minmax(180px, 1fr)
+    auto;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.customer-registration-form .primary-button {
+  margin-top: 0;
+}
+
+@media (max-width: 950px) {
+  .customer-registration-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .customer-registration-form {
+    grid-template-columns: 1fr;
+  }
 }

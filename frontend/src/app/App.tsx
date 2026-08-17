@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router";
-
+import { CustomersPage } from "./pages/CustomersPage";
 import { RequireAdmin } from "../features/auth/RequireAdmin";
 import { AdminLayout } from "./layouts/AdminLayout";
 import { LoginPage } from "./pages/LoginPage";
@@ -14,12 +14,7 @@ export function App() {
         <Route element={<AdminLayout />}>
           <Route
             path="/customers"
-            element={
-              <PlaceholderPage
-                title="Clientes"
-                description={"Gestión de clientes, " + "wallet e historial."}
-              />
-            }
+            element={<CustomersPage />}
           />
 
           <Route
