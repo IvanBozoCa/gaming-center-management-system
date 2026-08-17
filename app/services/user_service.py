@@ -19,6 +19,14 @@ class RegistrationConflictError(Exception):
     pass
 
 
+class AdminCustomerNotFoundError(Exception):
+    pass
+
+
+class AdminCustomerWalletNotFoundError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class AdminCustomerSummaryResult:
     id: UUID
@@ -26,6 +34,20 @@ class AdminCustomerSummaryResult:
     display_name: str
     is_active: bool
     created_at: datetime
+    available_seconds: int
+    reserved_seconds: int
+
+
+@dataclass(frozen=True)
+class AdminCustomerDetailResult:
+    id: UUID
+    username: str
+    display_name: str
+    is_active: bool
+
+    created_at: datetime
+    updated_at: datetime
+
     available_seconds: int
     reserved_seconds: int
 
@@ -157,3 +179,47 @@ def list_admin_customers(
             reserved_seconds,
         ) in rows
     ]
+    
+    
+def get_admin_customer_detail(
+    db: Session,
+    *,
+    customer_id: UUID,
+) -> AdminCustomerDetailResult:
+    row = db.execute(
+        select(
+            User,
+            TimeWallet,
+        )
+        .outerjoin(
+            TimeWallet,
+            TimeWallet.user_id == User.id,
+        )
+        .where(
+            User.id == customer_id,
+            User.role == "CUSTOMER",
+        )
+    ).one_or_none()
+
+    if row is None:
+        raise AdminCustomerNotFoundError
+
+    customer, wallet = row
+
+    if wallet is None:
+        raise AdminCustomerWalletNotFoundError
+
+    return AdminCustomerDetailResult(
+        id=customer.id,
+        username=customer.username,
+        display_name=customer.display_name,
+        is_active=customer.is_active,
+        created_at=customer.created_at,
+        updated_at=customer.updated_at,
+        available_seconds=(
+            wallet.available_seconds
+        ),
+        reserved_seconds=(
+            wallet.reserved_seconds
+        ),
+    )
