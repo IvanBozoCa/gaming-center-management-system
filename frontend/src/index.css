@@ -536,3 +536,150 @@ textarea {
     flex-direction: column;
   }
 }
+
+.sessions-page {
+  width: min(1300px, 100%);
+}
+
+.active-sessions-section {
+  margin-top: 1rem;
+}
+
+.session-time-state {
+  display: inline-block;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.session-time-state.running {
+  color: #bdf5ce;
+  background: #173524;
+}
+
+.session-time-state.exhausted {
+  color: #ffe6a8;
+  background: #3a2c11;
+}
+
+.table-secondary-text {
+  margin-top: 0.2rem;
+  color: #9da9bc;
+  font-size: 0.8rem;
+}
+
+.session-start-section {
+  margin-bottom: 2rem;
+  padding: 1.25rem;
+  border: 1px solid #253047;
+  border-radius: 12px;
+  background: #111a2b;
+}
+
+.session-start-form {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.5fr)
+    minmax(160px, 1fr)
+    minmax(120px, 0.6fr)
+    auto;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.session-start-form .primary-button {
+  margin-top: 0;
+}
+
+@media (max-width: 950px) {
+  .session-start-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .session-start-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.registered-session-actions {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 270px;
+}
+
+.session-extension-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 90px;
+}
+
+.session-extension-field span {
+  color: #9da9bc;
+  font-size: 0.75rem;
+}
+
+.session-extension-field input {
+  width: 100%;
+}
+
+.danger-button {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #63323b;
+  border-radius: 8px;
+  color: #ffd5dc;
+  background: #3b1d24;
+  cursor: pointer;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #512730;
+}
+
+.danger-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.session-history-section {
+  margin-top: 2rem;
+}
+
+.session-history-filters {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1fr)
+    minmax(180px, 1fr);
+  gap: 0.75rem;
+  margin: 1rem 0;
+  max-width: 700px;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.pagination-controls span {
+  color: #9da9bc;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 600px) {
+  .session-history-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .pagination-controls {
+    justify-content: space-between;
+  }
+}

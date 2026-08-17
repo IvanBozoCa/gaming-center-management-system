@@ -5,6 +5,7 @@ import { AdminLayout } from "./layouts/AdminLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { StationsPage } from "./pages/StationsPage";
+import { SessionsPage } from "./pages/SessionsPage";
 
 export function App() {
   return (
@@ -17,15 +18,7 @@ export function App() {
 
           <Route path="/stations" element={<StationsPage />} />
 
-          <Route
-            path="/sessions"
-            element={
-              <PlaceholderPage
-                title="Sesiones"
-                description={"Sesiones de clientes " + "registrados."}
-              />
-            }
-          />
+          <Route path="/sessions" element={<SessionsPage />} />
 
           <Route
             path="/guest-sessions"
