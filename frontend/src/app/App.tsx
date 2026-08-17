@@ -6,6 +6,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { StationsPage } from "./pages/StationsPage";
 import { SessionsPage } from "./pages/SessionsPage";
+import { GuestSessionsPage } from "./pages/GuestSessionsPage";
 
 export function App() {
   return (
@@ -20,15 +21,7 @@ export function App() {
 
           <Route path="/sessions" element={<SessionsPage />} />
 
-          <Route
-            path="/guest-sessions"
-            element={
-              <PlaceholderPage
-                title="Invitados"
-                description="Sesiones temporales GUEST."
-              />
-            }
-          />
+          <Route path="/guest-sessions" element={<GuestSessionsPage />} />
         </Route>
       </Route>
 
