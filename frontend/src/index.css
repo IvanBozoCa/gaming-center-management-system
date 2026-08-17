@@ -568,3 +568,39 @@ textarea {
   color: #9da9bc;
   font-size: 0.8rem;
 }
+
+.session-start-section {
+  margin-bottom: 2rem;
+  padding: 1.25rem;
+  border: 1px solid #253047;
+  border-radius: 12px;
+  background: #111a2b;
+}
+
+.session-start-form {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.5fr)
+    minmax(160px, 1fr)
+    minmax(120px, 0.6fr)
+    auto;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.session-start-form .primary-button {
+  margin-top: 0;
+}
+
+@media (max-width: 950px) {
+  .session-start-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .session-start-form {
+    grid-template-columns: 1fr;
+  }
+}

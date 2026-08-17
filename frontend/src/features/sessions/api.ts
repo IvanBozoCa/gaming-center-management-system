@@ -1,7 +1,11 @@
 import { getAccessToken } from "../auth/storage";
 import { apiRequest } from "../../lib/http";
 
-import type { ActiveRegisteredSession } from "./types";
+import type {
+  ActiveRegisteredSession,
+  RegisteredSessionStartResponse,
+  StartRegisteredSessionInput,
+} from "./types";
 
 function requireAccessToken(): string {
   const token = getAccessToken();
@@ -13,12 +17,23 @@ function requireAccessToken(): string {
   return token;
 }
 
-export function listActiveRegisteredSessions():
-  Promise<ActiveRegisteredSession[]> {
-  return apiRequest<ActiveRegisteredSession[]>(
-    "/admin/sessions/active",
-    {
-      token: requireAccessToken(),
+export function listActiveRegisteredSessions(): Promise<
+  ActiveRegisteredSession[]
+> {
+  return apiRequest<ActiveRegisteredSession[]>("/admin/sessions/active", {
+    token: requireAccessToken(),
+  });
+}
+
+export function startRegisteredSession(
+  data: StartRegisteredSessionInput,
+): Promise<RegisteredSessionStartResponse> {
+  return apiRequest<RegisteredSessionStartResponse>("/admin/sessions", {
+    method: "POST",
+    token: requireAccessToken(),
+    headers: {
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(data),
+  });
 }
