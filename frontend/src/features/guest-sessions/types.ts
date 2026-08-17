@@ -25,3 +25,19 @@ export interface ActiveGuestSession {
   remaining_seconds: number;
   time_state: GuestSessionTimeState;
 }
+
+export interface GuestSessionFinishResponse {
+  session_id: string;
+  station_id: string;
+
+  authorized_seconds: number;
+  consumed_seconds: number;
+  unused_seconds: number;
+
+  session_type: "GUEST";
+  session_status: "FINISHED";
+  station_status: "AVAILABLE";
+
+  started_at: string;
+  ended_at: string;
+}

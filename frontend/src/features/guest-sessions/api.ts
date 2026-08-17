@@ -3,6 +3,7 @@ import { apiRequest } from "../../lib/http";
 
 import type {
   ActiveGuestSession,
+  GuestSessionFinishResponse,
   GuestSessionStartResponse,
   StartGuestSessionInput,
 } from "./types";
@@ -34,4 +35,16 @@ export function startGuestSession(
     },
     body: JSON.stringify(data),
   });
+}
+
+export function finishGuestSession(
+  sessionId: string,
+): Promise<GuestSessionFinishResponse> {
+  return apiRequest<GuestSessionFinishResponse>(
+    `/admin/guest-sessions/${sessionId}/finish`,
+    {
+      method: "POST",
+      token: requireAccessToken(),
+    },
+  );
 }

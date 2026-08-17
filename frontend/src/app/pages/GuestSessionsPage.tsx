@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import {
+  finishGuestSession,
   listActiveGuestSessions,
   startGuestSession,
 } from "../../features/guest-sessions/api";
@@ -56,6 +57,36 @@ function getStartErrorMessage(error: unknown): string {
   return "No fue posible iniciar la sesión de invitado.";
 }
 
+function getFinishErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return "No fue posible finalizar la sesión de invitado.";
+  }
+
+  if (error.status === 404) {
+    return "La sesión de invitado ya no existe.";
+  }
+
+  if (
+    error.status === 409 &&
+    error.message === "Guest session is already finished"
+  ) {
+    return "La sesión ya fue finalizada.";
+  }
+
+  if (
+    error.status === 409 &&
+    error.message === "Guest session station not found"
+  ) {
+    return "La estación asociada a la sesión ya no existe.";
+  }
+
+  if (error.status === 409) {
+    return "No fue posible finalizar la sesión por un conflicto de estado.";
+  }
+
+  return "No fue posible finalizar la sesión de invitado.";
+}
+
 export function GuestSessionsPage() {
   const [sessions, setSessions] = useState<ActiveGuestSession[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
@@ -72,6 +103,11 @@ export function GuestSessionsPage() {
   const [stationError, setStationError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [finishingSessionId, setFinishingSessionId] = useState<string | null>(
+    null,
+  );
+
+  const [finishError, setFinishError] = useState<string | null>(null);
 
   const loadSessions = useCallback(
     async (showFullLoading = true): Promise<boolean> => {
@@ -191,6 +227,49 @@ export function GuestSessionsPage() {
       setIsStarting(false);
     }
   }
+  async function handleFinishSession(session: ActiveGuestSession) {
+    const confirmed = window.confirm(
+      `¿Finalizar la sesión de invitado en ${session.station_code}?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setFinishingSessionId(session.session_id);
+    setFinishError(null);
+    setFeedback(null);
+
+    try {
+      const finishedSession = await finishGuestSession(session.session_id);
+
+      setSessions((currentSessions) =>
+        currentSessions.filter(
+          (currentSession) => currentSession.session_id !== session.session_id,
+        ),
+      );
+
+      const stationsUpdated = await loadAvailableStations();
+
+      if (!stationsUpdated) {
+        setFeedback(
+          "La sesión fue finalizada, pero no fue posible actualizar las estaciones.",
+        );
+      } else {
+        setFeedback(
+          `${session.station_code} finalizada: ${formatDuration(
+            finishedSession.consumed_seconds,
+          )} consumidos y ${formatDuration(
+            finishedSession.unused_seconds,
+          )} no utilizados.`,
+        );
+      }
+    } catch (error) {
+      setFinishError(getFinishErrorMessage(error));
+    } finally {
+      setFinishingSessionId(null);
+    }
+  }
   return (
     <section className="sessions-page">
       <header className="page-header">
@@ -300,6 +379,12 @@ export function GuestSessionsPage() {
           </p>
         )}
 
+        {finishError && (
+          <p className="form-error" role="alert">
+            {finishError}
+          </p>
+        )}
+
         {error && (
           <p className="form-error" role="alert">
             {error}
@@ -321,6 +406,7 @@ export function GuestSessionsPage() {
                   <th>Transcurrido</th>
                   <th>Restante</th>
                   <th>Inicio</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
 
@@ -331,6 +417,18 @@ export function GuestSessionsPage() {
                       <strong>{session.station_code}</strong>
 
                       <div className="table-secondary-text">Invitado</div>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="danger-button"
+                        disabled={finishingSessionId === session.session_id}
+                        onClick={() => void handleFinishSession(session)}
+                      >
+                        {finishingSessionId === session.session_id
+                          ? "Finalizando..."
+                          : "Finalizar"}
+                      </button>
                     </td>
 
                     <td>
