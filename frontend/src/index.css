@@ -132,15 +132,11 @@ textarea {
 }
 
 .login-card h1 {
-  margin:
-    0.75rem 0
-    0.5rem;
+  margin: 0.75rem 0 0.5rem;
 }
 
 .login-description {
-  margin:
-    0 0
-    2rem;
+  margin: 0 0 2rem;
   color: #9da9bc;
 }
 

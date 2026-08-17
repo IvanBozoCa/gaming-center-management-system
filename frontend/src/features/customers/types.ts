@@ -73,4 +73,3 @@ export interface RegisteredCustomerResponse {
   is_active: boolean;
   created_at: string;
 }
-
