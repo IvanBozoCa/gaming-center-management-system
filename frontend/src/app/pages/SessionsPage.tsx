@@ -417,105 +417,72 @@ export function SessionsPage() {
       setSessionActionId(null);
     }
   }
-  async function handleFinishSession(session: ActiveRegisteredSession) {
-    const confirmed = window.confirm(
-      `¿Finalizar la sesión de ${session.customer_display_name} en ${session.station_code}?`,
-    );
+  async function handleFinishSession(
+  session: ActiveRegisteredSession,
+) {
+  const confirmed = window.confirm(
+    `¿Finalizar la sesión de ${session.customer_display_name} en ${session.station_code}?`,
+  );
 
-    if (!confirmed) {
-      return;
-    }
-
-    setSessionActionId(session.session_id);
-    setActionError(null);
-    setActionSuccess(null);
-
-    try {
-      const finishedSession = await finishRegisteredSession(session.session_id);
-
-      setSessions((currentSessions) =>
-        currentSessions.filter(
-          (currentSession) => currentSession.session_id !== session.session_id,
-        ),
-      );
-
-      setExtensionMinutes((current) => {
-        const next = { ...current };
-
-        delete next[session.session_id];
-
-        return next;
-      });
-
-      const [optionsUpdated, historyUpdated] = await Promise.all([
-        loadStartOptions(),
-        loadHistory(historyOffset, historyCustomerId, historyStationId),
-      ]);
-
-      if (!optionsUpdated || !historyUpdated) {
-        setActionSuccess(
-          "La sesión fue finalizada, pero no fue posible actualizar toda la pantalla.",
-        );
-      } else {
-        setActionSuccess(
-          `${session.station_code} finalizada: ${formatDuration(
-            finishedSession.consumed_seconds,
-          )} consumidos y ${formatDuration(
-            finishedSession.released_seconds,
-          )} devueltos.`,
-        );
-      }
-    } catch (error) {
-      setActionError(getFinishErrorMessage(error));
-    } finally {
-      setSessionActionId(null);
-    }
-
-    if (!confirmed) {
-      return;
-    }
-
-    setSessionActionId(session.session_id);
-    setActionError(null);
-    setActionSuccess(null);
-
-    try {
-      const finishedSession = await finishRegisteredSession(session.session_id);
-
-      setSessions((currentSessions) =>
-        currentSessions.filter(
-          (currentSession) => currentSession.session_id !== session.session_id,
-        ),
-      );
-
-      setExtensionMinutes((current) => {
-        const next = { ...current };
-        delete next[session.session_id];
-
-        return next;
-      });
-
-      const [optionsUpdated, historyUpdated] = await Promise.all([
-        loadStartOptions(),
-        loadHistory(historyOffset, historyCustomerId, historyStationId),
-      ]);
-
-      setActionSuccess(
-        optionsUpdated
-          ? `${session.station_code} finalizada: ${formatDuration(
-              finishedSession.consumed_seconds,
-            )} consumidos y ${formatDuration(
-              finishedSession.released_seconds,
-            )} devueltos.`
-          : "La sesión fue finalizada, pero no fue posible actualizar clientes y estaciones.",
-      );
-    } catch (error) {
-      setActionError(getFinishErrorMessage(error));
-    } finally {
-      setSessionActionId(null);
-    }
+  if (!confirmed) {
+    return;
   }
 
+  setSessionActionId(session.session_id);
+  setActionError(null);
+  setActionSuccess(null);
+
+  try {
+    const finishedSession = await finishRegisteredSession(
+      session.session_id,
+    );
+
+    setSessions((currentSessions) =>
+      currentSessions.filter(
+        (currentSession) =>
+          currentSession.session_id !== session.session_id,
+      ),
+    );
+
+    setExtensionMinutes((current) => {
+      const next = { ...current };
+
+      delete next[session.session_id];
+
+      return next;
+    });
+
+    const [optionsUpdated, historyUpdated] =
+      await Promise.all([
+        loadStartOptions(),
+        loadHistory(
+          historyOffset,
+          historyCustomerId,
+          historyStationId,
+        ),
+      ]);
+
+    if (!optionsUpdated || !historyUpdated) {
+      setActionSuccess(
+        "La sesión fue finalizada, pero no fue posible actualizar toda la pantalla.",
+      );
+    } else {
+      setActionSuccess(
+        `${session.station_code} finalizada: ${formatDuration(
+          finishedSession.consumed_seconds,
+        )} consumidos y ${formatDuration(
+          finishedSession.released_seconds,
+        )} devueltos.`,
+      );
+    }
+  } catch (error) {
+    setActionError(
+      getFinishErrorMessage(error),
+    );
+  } finally {
+    setSessionActionId(null);
+  }
+}
   return (
     <section className="sessions-page">
       <header className="page-header">
