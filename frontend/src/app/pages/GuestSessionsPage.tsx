@@ -485,18 +485,6 @@ export function GuestSessionsPage() {
 
                       <div className="table-secondary-text">Invitado</div>
                     </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="danger-button"
-                        disabled={finishingSessionId === session.session_id}
-                        onClick={() => void handleFinishSession(session)}
-                      >
-                        {finishingSessionId === session.session_id
-                          ? "Finalizando..."
-                          : "Finalizar"}
-                      </button>
-                    </td>
 
                     <td>
                       <span
@@ -516,6 +504,18 @@ export function GuestSessionsPage() {
                     <td>{formatDuration(session.remaining_seconds)}</td>
 
                     <td>{formatDateTime(session.started_at)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="danger-button"
+                        disabled={finishingSessionId === session.session_id}
+                        onClick={() => void handleFinishSession(session)}
+                      >
+                        {finishingSessionId === session.session_id
+                          ? "Finalizando..."
+                          : "Finalizar"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
