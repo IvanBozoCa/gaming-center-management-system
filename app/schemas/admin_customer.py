@@ -28,3 +28,28 @@ class AdminCustomerSummaryResponse(
     reserved_seconds: int = Field(
         ge=0,
     )
+
+
+class AdminCustomerDetailResponse(
+    BaseModel
+):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    id: UUID
+    username: str
+    display_name: str
+    is_active: bool
+
+    created_at: datetime
+    updated_at: datetime
+
+    available_seconds: int = Field(
+        ge=0,
+    )
+    reserved_seconds: int = Field(
+        ge=0,
+    )
+
+
