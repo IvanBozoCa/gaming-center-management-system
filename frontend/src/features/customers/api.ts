@@ -8,6 +8,8 @@ import type {
   TimeTransaction,
   TimeWallet,
   TimePurchaseResponse,
+  RegisterCustomerInput,
+  RegisteredCustomerResponse,
 } from "./types";
 
 function requireAccessToken(): string {
@@ -111,6 +113,22 @@ export function purchaseCustomerTime(
       body: JSON.stringify({
         seconds,
       }),
+    },
+  );
+}
+
+export function registerCustomer(
+  data: RegisterCustomerInput,
+): Promise<RegisteredCustomerResponse> {
+  return apiRequest<RegisteredCustomerResponse>(
+    "/auth/register",
+    {
+      method: "POST",
+      token: requireAccessToken(),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
     },
   );
 }

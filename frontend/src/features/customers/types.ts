@@ -58,3 +58,19 @@ export interface TimePurchaseResponse {
   transaction_type: string;
   created_at: string;
 }
+
+export interface RegisterCustomerInput {
+  username: string;
+  display_name: string;
+  password: string;
+}
+
+export interface RegisteredCustomerResponse {
+  id: string;
+  username: string;
+  display_name: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+
