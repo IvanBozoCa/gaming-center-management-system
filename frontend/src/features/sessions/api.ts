@@ -8,6 +8,8 @@ import type {
   RegisteredSessionFinishResponse,
   RegisteredSessionStartResponse,
   StartRegisteredSessionInput,
+  FinishedRegisteredSession,
+  ListRegisteredSessionHistoryParams,
 } from "./types";
 
 function requireAccessToken(): string {
@@ -65,6 +67,37 @@ export function finishRegisteredSession(
     `/admin/sessions/${sessionId}/finish`,
     {
       method: "POST",
+      token: requireAccessToken(),
+    },
+  );
+}
+
+export function listRegisteredSessionHistory(
+  params: ListRegisteredSessionHistoryParams = {},
+): Promise<FinishedRegisteredSession[]> {
+  const searchParams = new URLSearchParams();
+
+  if (params.customerId) {
+    searchParams.set("customer_id", params.customerId);
+  }
+
+  if (params.stationId) {
+    searchParams.set("station_id", params.stationId);
+  }
+
+  searchParams.set(
+    "limit",
+    String(params.limit ?? 20),
+  );
+
+  searchParams.set(
+    "offset",
+    String(params.offset ?? 0),
+  );
+
+  return apiRequest<FinishedRegisteredSession[]>(
+    `/admin/sessions/history?${searchParams.toString()}`,
+    {
       token: requireAccessToken(),
     },
   );

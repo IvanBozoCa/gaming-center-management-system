@@ -5,10 +5,12 @@ import {
   finishRegisteredSession,
   listActiveRegisteredSessions,
   startRegisteredSession,
+  listRegisteredSessionHistory,
 } from "../../features/sessions/api";
 import type {
   ActiveRegisteredSession,
   SessionTimeState,
+  FinishedRegisteredSession,
 } from "../../features/sessions/types";
 import { formatDuration } from "../../lib/time";
 import { listCustomers } from "../../features/customers/api";
@@ -110,10 +112,27 @@ export function SessionsPage() {
   const [startError, setStartError] = useState<string | null>(null);
   const [startSuccess, setStartSuccess] = useState<string | null>(null);
 
+  const [history, setHistory] = useState<FinishedRegisteredSession[]>([]);
+
+  const [historyCustomers, setHistoryCustomers] = useState<CustomerSummary[]>(
+    [],
+  );
+  const [historyStations, setHistoryStations] = useState<Station[]>([]);
+
+  const [historyCustomerId, setHistoryCustomerId] = useState("");
+
+  const [historyStationId, setHistoryStationId] = useState("");
+
+  const [historyOffset, setHistoryOffset] = useState(0);
+
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
   const [extensionMinutes, setExtensionMinutes] = useState<
     Record<string, string>
   >({});
-
+  const HISTORY_PAGE_SIZE = 20;
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
@@ -175,6 +194,53 @@ export function SessionsPage() {
       setIsLoadingOptions(false);
     }
   }, []);
+  const loadHistoryOptions = useCallback(async (): Promise<boolean> => {
+    try {
+      const [customerData, stationData] = await Promise.all([
+        listCustomers({
+          limit: 100,
+        }),
+        listStations(),
+      ]);
+
+      setHistoryCustomers(customerData);
+      setHistoryStations(stationData);
+
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+  const loadHistory = useCallback(
+    async (
+      offset: number,
+      customerId: string,
+      stationId: string,
+    ): Promise<boolean> => {
+      setIsHistoryLoading(true);
+      setHistoryError(null);
+
+      try {
+        const data = await listRegisteredSessionHistory({
+          customerId: customerId || undefined,
+          stationId: stationId || undefined,
+          limit: HISTORY_PAGE_SIZE,
+          offset,
+        });
+
+        setHistory(data);
+
+        return true;
+      } catch {
+        setHistoryError("No fue posible cargar el historial de sesiones.");
+
+        return false;
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void loadSessions();
@@ -182,6 +248,13 @@ export function SessionsPage() {
   useEffect(() => {
     void loadStartOptions();
   }, [loadStartOptions]);
+  useEffect(() => {
+    void loadHistoryOptions();
+  }, [loadHistoryOptions]);
+
+  useEffect(() => {
+    void loadHistory(historyOffset, historyCustomerId, historyStationId);
+  }, [loadHistory, historyOffset, historyCustomerId, historyStationId]);
 
   async function handleRefresh() {
     setIsRefreshing(true);
@@ -368,12 +441,64 @@ export function SessionsPage() {
 
       setExtensionMinutes((current) => {
         const next = { ...current };
+
         delete next[session.session_id];
 
         return next;
       });
 
-      const optionsUpdated = await loadStartOptions();
+      const [optionsUpdated, historyUpdated] = await Promise.all([
+        loadStartOptions(),
+        loadHistory(historyOffset, historyCustomerId, historyStationId),
+      ]);
+
+      if (!optionsUpdated || !historyUpdated) {
+        setActionSuccess(
+          "La sesión fue finalizada, pero no fue posible actualizar toda la pantalla.",
+        );
+      } else {
+        setActionSuccess(
+          `${session.station_code} finalizada: ${formatDuration(
+            finishedSession.consumed_seconds,
+          )} consumidos y ${formatDuration(
+            finishedSession.released_seconds,
+          )} devueltos.`,
+        );
+      }
+    } catch (error) {
+      setActionError(getFinishErrorMessage(error));
+    } finally {
+      setSessionActionId(null);
+    }
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSessionActionId(session.session_id);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const finishedSession = await finishRegisteredSession(session.session_id);
+
+      setSessions((currentSessions) =>
+        currentSessions.filter(
+          (currentSession) => currentSession.session_id !== session.session_id,
+        ),
+      );
+
+      setExtensionMinutes((current) => {
+        const next = { ...current };
+        delete next[session.session_id];
+
+        return next;
+      });
+
+      const [optionsUpdated, historyUpdated] = await Promise.all([
+        loadStartOptions(),
+        loadHistory(historyOffset, historyCustomerId, historyStationId),
+      ]);
 
       setActionSuccess(
         optionsUpdated
@@ -652,6 +777,149 @@ export function SessionsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </>
+        )}
+      </section>
+      <section className="session-history-section">
+        <div className="section-header">
+          <div>
+            <h2>Historial de sesiones</h2>
+
+            <p className="page-description">Sesiones REGISTERED finalizadas.</p>
+          </div>
+        </div>
+
+        <div className="session-history-filters">
+          <label className="form-field">
+            <span>Cliente</span>
+
+            <select
+              value={historyCustomerId}
+              onChange={(event) => {
+                setHistoryCustomerId(event.target.value);
+                setHistoryOffset(0);
+              }}
+            >
+              <option value="">Todos los clientes</option>
+
+              {historyCustomers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.display_name}
+                  {" · @"}
+                  {customer.username}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="form-field">
+            <span>Estación</span>
+
+            <select
+              value={historyStationId}
+              onChange={(event) => {
+                setHistoryStationId(event.target.value);
+                setHistoryOffset(0);
+              }}
+            >
+              <option value="">Todas las estaciones</option>
+
+              {historyStations.map((station) => (
+                <option key={station.id} value={station.id}>
+                  {station.code}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {historyError && (
+          <p className="form-error" role="alert">
+            {historyError}
+          </p>
+        )}
+
+        {isHistoryLoading ? (
+          <div className="content-state">Cargando historial...</div>
+        ) : history.length === 0 ? (
+          <div className="content-state">
+            No hay sesiones finalizadas para estos filtros.
+          </div>
+        ) : (
+          <>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Estación</th>
+                    <th>Cliente</th>
+                    <th>Autorizado</th>
+                    <th>Consumido</th>
+                    <th>Devuelto</th>
+                    <th>Inicio</th>
+                    <th>Fin</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {history.map((session) => (
+                    <tr key={session.session_id}>
+                      <td>
+                        <strong>{session.station_code}</strong>
+                      </td>
+
+                      <td>
+                        <strong>{session.customer_display_name}</strong>
+
+                        <div className="table-secondary-text">
+                          @{session.customer_username}
+                        </div>
+                      </td>
+
+                      <td>{formatDuration(session.authorized_seconds)}</td>
+
+                      <td>{formatDuration(session.consumed_seconds)}</td>
+
+                      <td>{formatDuration(session.released_seconds)}</td>
+
+                      <td>{formatDateTime(session.started_at)}</td>
+
+                      <td>{formatDateTime(session.ended_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pagination-controls">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={historyOffset === 0}
+                onClick={() =>
+                  setHistoryOffset((current) =>
+                    Math.max(0, current - HISTORY_PAGE_SIZE),
+                  )
+                }
+              >
+                Anterior
+              </button>
+
+              <span>
+                Página {Math.floor(historyOffset / HISTORY_PAGE_SIZE) + 1}
+              </span>
+
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={history.length < HISTORY_PAGE_SIZE}
+                onClick={() =>
+                  setHistoryOffset((current) => current + HISTORY_PAGE_SIZE)
+                }
+              >
+                Siguiente
+              </button>
             </div>
           </>
         )}

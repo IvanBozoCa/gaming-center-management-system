@@ -646,3 +646,40 @@ textarea {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.session-history-section {
+  margin-top: 2rem;
+}
+
+.session-history-filters {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1fr)
+    minmax(180px, 1fr);
+  gap: 0.75rem;
+  margin: 1rem 0;
+  max-width: 700px;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.pagination-controls span {
+  color: #9da9bc;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 600px) {
+  .session-history-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .pagination-controls {
+    justify-content: space-between;
+  }
+}

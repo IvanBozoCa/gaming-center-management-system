@@ -75,3 +75,28 @@ export interface RegisteredSessionFinishResponse {
   started_at: string;
   ended_at: string;
 }
+
+export interface FinishedRegisteredSession {
+  session_id: string;
+
+  station_id: string;
+  station_code: string;
+
+  customer_id: string;
+  customer_username: string;
+  customer_display_name: string;
+
+  authorized_seconds: number;
+  consumed_seconds: number;
+  released_seconds: number;
+
+  started_at: string;
+  ended_at: string;
+}
+
+export interface ListRegisteredSessionHistoryParams {
+  customerId?: string;
+  stationId?: string;
+  limit?: number;
+  offset?: number;
+}
