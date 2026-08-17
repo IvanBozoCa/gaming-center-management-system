@@ -417,72 +417,60 @@ export function SessionsPage() {
       setSessionActionId(null);
     }
   }
-  async function handleFinishSession(
-  session: ActiveRegisteredSession,
-) {
-  const confirmed = window.confirm(
-    `¿Finalizar la sesión de ${session.customer_display_name} en ${session.station_code}?`,
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  setSessionActionId(session.session_id);
-  setActionError(null);
-  setActionSuccess(null);
-
-  try {
-    const finishedSession = await finishRegisteredSession(
-      session.session_id,
+  async function handleFinishSession(session: ActiveRegisteredSession) {
+    const confirmed = window.confirm(
+      `¿Finalizar la sesión de ${session.customer_display_name} en ${session.station_code}?`,
     );
 
-    setSessions((currentSessions) =>
-      currentSessions.filter(
-        (currentSession) =>
-          currentSession.session_id !== session.session_id,
-      ),
-    );
+    if (!confirmed) {
+      return;
+    }
 
-    setExtensionMinutes((current) => {
-      const next = { ...current };
+    setSessionActionId(session.session_id);
+    setActionError(null);
+    setActionSuccess(null);
 
-      delete next[session.session_id];
+    try {
+      const finishedSession = await finishRegisteredSession(session.session_id);
 
-      return next;
-    });
-
-    const [optionsUpdated, historyUpdated] =
-      await Promise.all([
-        loadStartOptions(),
-        loadHistory(
-          historyOffset,
-          historyCustomerId,
-          historyStationId,
+      setSessions((currentSessions) =>
+        currentSessions.filter(
+          (currentSession) => currentSession.session_id !== session.session_id,
         ),
+      );
+
+      setExtensionMinutes((current) => {
+        const next = { ...current };
+
+        delete next[session.session_id];
+
+        return next;
+      });
+
+      const [optionsUpdated, historyUpdated] = await Promise.all([
+        loadStartOptions(),
+        loadHistory(historyOffset, historyCustomerId, historyStationId),
       ]);
 
-    if (!optionsUpdated || !historyUpdated) {
-      setActionSuccess(
-        "La sesión fue finalizada, pero no fue posible actualizar toda la pantalla.",
-      );
-    } else {
-      setActionSuccess(
-        `${session.station_code} finalizada: ${formatDuration(
-          finishedSession.consumed_seconds,
-        )} consumidos y ${formatDuration(
-          finishedSession.released_seconds,
-        )} devueltos.`,
-      );
+      if (!optionsUpdated || !historyUpdated) {
+        setActionSuccess(
+          "La sesión fue finalizada, pero no fue posible actualizar toda la pantalla.",
+        );
+      } else {
+        setActionSuccess(
+          `${session.station_code} finalizada: ${formatDuration(
+            finishedSession.consumed_seconds,
+          )} consumidos y ${formatDuration(
+            finishedSession.released_seconds,
+          )} devueltos.`,
+        );
+      }
+    } catch (error) {
+      setActionError(getFinishErrorMessage(error));
+    } finally {
+      setSessionActionId(null);
     }
-  } catch (error) {
-    setActionError(
-      getFinishErrorMessage(error),
-    );
-  } finally {
-    setSessionActionId(null);
   }
-}
   return (
     <section className="sessions-page">
       <header className="page-header">
