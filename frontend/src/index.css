@@ -362,3 +362,40 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.time-purchase-section {
+  margin-bottom: 2.5rem;
+  padding: 1.25rem;
+  border: 1px solid #253047;
+  border-radius: 12px;
+  background: #111a2b;
+}
+
+.time-purchase-form {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 280px)
+    auto;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.time-purchase-form .primary-button {
+  margin-top: 0;
+}
+
+.form-success {
+  margin: 1rem 0 0;
+  padding: 0.75rem;
+  border: 1px solid #2c6840;
+  border-radius: 8px;
+  color: #bdf5ce;
+  background: #173524;
+}
+
+@media (max-width: 700px) {
+  .time-purchase-form {
+    grid-template-columns: 1fr;
+  }
+}

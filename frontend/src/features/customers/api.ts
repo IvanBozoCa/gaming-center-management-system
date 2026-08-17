@@ -7,6 +7,7 @@ import type {
   ListCustomersParams,
   TimeTransaction,
   TimeWallet,
+  TimePurchaseResponse,
 } from "./types";
 
 function requireAccessToken(): string {
@@ -91,6 +92,25 @@ export function listCustomerTransactions(
     `/admin/customers/${customerId}/time-transactions?${params.toString()}`,
     {
       token: requireAccessToken(),
+    },
+  );
+}
+
+export function purchaseCustomerTime(
+  customerId: string,
+  seconds: number,
+): Promise<TimePurchaseResponse> {
+  return apiRequest<TimePurchaseResponse>(
+    `/admin/customers/${customerId}/time-purchases`,
+    {
+      method: "POST",
+      token: requireAccessToken(),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        seconds,
+      }),
     },
   );
 }

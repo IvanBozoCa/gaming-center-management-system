@@ -48,3 +48,13 @@ export interface TimeTransaction {
   actor_user_id: string | null;
   created_at: string;
 }
+
+export interface TimePurchaseResponse {
+  transaction_id: string;
+  customer_id: string;
+  credited_seconds: number;
+  available_seconds: number;
+  reserved_seconds: number;
+  transaction_type: string;
+  created_at: string;
+}
