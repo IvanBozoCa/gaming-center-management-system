@@ -1,14 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { listStations } from "../../features/stations/api";
-import type {
-  Station,
-  StationStatus,
-} from "../../features/stations/types";
+import type { Station, StationStatus } from "../../features/stations/types";
 
 import { listActiveRegisteredSessions } from "../../features/sessions/api";
 import type { ActiveRegisteredSession } from "../../features/sessions/types";
@@ -51,43 +44,32 @@ interface RoomStation {
   session: RoomSession | null;
 }
 
-const stationStatusLabels: Record<
-  StationStatus,
-  string
-> = {
+const stationStatusLabels: Record<StationStatus, string> = {
   AVAILABLE: "Disponible",
   IN_USE: "En uso",
   MAINTENANCE: "Mantenimiento",
   OFFLINE: "Fuera de línea",
 };
 
-const clpFormatter =
-  new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  });
+const clpFormatter = new Intl.NumberFormat("es-CL", {
+  style: "currency",
+  currency: "CLP",
+  maximumFractionDigits: 0,
+});
 
-function formatPriceClp(
-  priceClp: number,
-): string {
+function formatPriceClp(priceClp: number): string {
   return clpFormatter.format(priceClp);
 }
 
-function normalizeSearchText(
-  value: string,
-): string {
+function normalizeSearchText(value: string): string {
   return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("es-CL")
-    .replace(/\s+/g, " ")
     .trim();
 }
 
-function getGuestSaleErrorMessage(
-  error: unknown,
-): string {
+function getGuestSaleErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) {
     return "No fue posible iniciar la sesión de invitado.";
   }
@@ -110,9 +92,7 @@ function getGuestSaleErrorMessage(
   }
 }
 
-function getRegisteredSaleErrorMessage(
-  error: unknown,
-): string {
+function getRegisteredSaleErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) {
     return "No fue posible acreditar el tiempo al cliente.";
   }
@@ -138,32 +118,22 @@ function getRegisteredSaleErrorMessage(
   }
 }
 
-function formatRemainingTime(
-  seconds: number,
-): string {
-  const safeSeconds = Math.max(
-    0,
-    seconds,
-  );
+function formatRemainingTime(seconds: number): string {
+  const safeSeconds = Math.max(0, seconds);
 
   if (safeSeconds === 0) {
     return "Sin tiempo";
   }
 
-  const totalMinutes = Math.floor(
-    safeSeconds / 60,
-  );
+  const totalMinutes = Math.floor(safeSeconds / 60);
 
   if (totalMinutes === 0) {
     return "< 1 min";
   }
 
-  const hours = Math.floor(
-    totalMinutes / 60,
-  );
+  const hours = Math.floor(totalMinutes / 60);
 
-  const minutes =
-    totalMinutes % 60;
+  const minutes = totalMinutes % 60;
 
   if (hours === 0) {
     return `${minutes} min`;
@@ -181,80 +151,47 @@ function buildRoomStations(
   registeredSessions: ActiveRegisteredSession[],
   guestSessions: ActiveGuestSession[],
 ): RoomStation[] {
-  const registeredByStationId =
-    new Map(
-      registeredSessions.map(
-        (session) => [
-          session.station_id,
-          session,
-        ],
-      ),
-    );
+  const registeredByStationId = new Map(
+    registeredSessions.map((session) => [session.station_id, session]),
+  );
 
-  const guestByStationId =
-    new Map(
-      guestSessions.map(
-        (session) => [
-          session.station_id,
-          session,
-        ],
-      ),
-    );
+  const guestByStationId = new Map(
+    guestSessions.map((session) => [session.station_id, session]),
+  );
 
   return [...stations]
-    .sort(
-      (
-        firstStation,
-        secondStation,
-      ) =>
-        firstStation.code.localeCompare(
-          secondStation.code,
-          "es",
-          {
-            numeric: true,
-            sensitivity: "base",
-          },
-        ),
+    .sort((firstStation, secondStation) =>
+      firstStation.code.localeCompare(secondStation.code, "es", {
+        numeric: true,
+        sensitivity: "base",
+      }),
     )
     .map((station) => {
-      const registeredSession =
-        registeredByStationId.get(
-          station.id,
-        );
+      const registeredSession = registeredByStationId.get(station.id);
 
       if (registeredSession) {
         return {
           station,
           session: {
             type: "REGISTERED",
-            sessionId:
-              registeredSession.session_id,
-            customerName:
-              registeredSession.customer_display_name,
-            remainingSeconds:
-              registeredSession.remaining_seconds,
-            timeState:
-              registeredSession.time_state,
+            sessionId: registeredSession.session_id,
+            customerName: registeredSession.customer_display_name,
+            remainingSeconds: registeredSession.remaining_seconds,
+            timeState: registeredSession.time_state,
           },
         };
       }
 
-      const guestSession =
-        guestByStationId.get(
-          station.id,
-        );
+      const guestSession = guestByStationId.get(station.id);
 
       if (guestSession) {
         return {
           station,
           session: {
             type: "GUEST",
-            sessionId:
-              guestSession.session_id,
-            remainingSeconds:
-              guestSession.remaining_seconds,
-            timeState:
-              guestSession.time_state,
+            sessionId: guestSession.session_id,
+            remainingSeconds: guestSession.remaining_seconds,
+            timeState: guestSession.time_state,
           },
         };
       }
@@ -267,181 +204,105 @@ function buildRoomStations(
 }
 
 export function RoomPage() {
-  const [
-    roomStations,
-    setRoomStations,
-  ] = useState<RoomStation[]>([]);
+  const [roomStations, setRoomStations] = useState<RoomStation[]>([]);
 
-  const [
-    isLoading,
-    setIsLoading,
-  ] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [
-    isRefreshing,
-    setIsRefreshing,
-  ] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [
-    error,
-    setError,
-  ] = useState<string | null>(
-    null,
-  );
+  const [error, setError] = useState<string | null>(null);
 
   /*
    * Datos compartidos de tarifas
    */
 
-  const [
-    timeProducts,
-    setTimeProducts,
-  ] = useState<TimeProduct[]>([]);
+  const [timeProducts, setTimeProducts] = useState<TimeProduct[]>([]);
 
-  const [
-    selectedTimeProductId,
-    setSelectedTimeProductId,
-  ] = useState<string | null>(
-    null,
-  );
+  const [selectedTimeProductId, setSelectedTimeProductId] = useState<
+    string | null
+  >(null);
 
-  const [
-    isLoadingTimeProducts,
-    setIsLoadingTimeProducts,
-  ] = useState(false);
+  const [isLoadingTimeProducts, setIsLoadingTimeProducts] = useState(false);
 
   /*
    * Venta GUEST
    */
 
-  const [
-    selectedGuestStation,
-    setSelectedGuestStation,
-  ] = useState<Station | null>(
-    null,
-  );
+  const [selectedGuestStation, setSelectedGuestStation] =
+    useState<Station | null>(null);
 
-  const [
-    isCreatingGuestSale,
-    setIsCreatingGuestSale,
-  ] = useState(false);
+  const [isCreatingGuestSale, setIsCreatingGuestSale] = useState(false);
 
-  const [
-    guestSaleError,
-    setGuestSaleError,
-  ] = useState<string | null>(
-    null,
-  );
+  const [guestSaleError, setGuestSaleError] = useState<string | null>(null);
 
   /*
    * Venta REGISTERED
    */
 
-  const [
-    isRegisteredSaleOpen,
-    setIsRegisteredSaleOpen,
-  ] = useState(false);
+  const [isRegisteredSaleOpen, setIsRegisteredSaleOpen] = useState(false);
 
-  const [
-    activeCustomers,
-    setActiveCustomers,
-  ] = useState<
-    CustomerSummary[]
-  >([]);
+  const [activeCustomers, setActiveCustomers] = useState<CustomerSummary[]>([]);
 
-  const [
-    customerQuery,
-    setCustomerQuery,
-  ] = useState("");
+  const [customerQuery, setCustomerQuery] = useState("");
 
-  const [
-    selectedCustomer,
-    setSelectedCustomer,
-  ] =
-    useState<CustomerSummary | null>(
-      null,
-    );
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<CustomerSummary | null>(null);
 
-  const [
-    isSearchingCustomers,
-    setIsSearchingCustomers,
-  ] = useState(false);
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
 
-  const [
-    customerSearchError,
-    setCustomerSearchError,
-  ] = useState<string | null>(
+  const [customerSearchError, setCustomerSearchError] = useState<string | null>(
     null,
   );
 
-  const [
-    isCreatingRegisteredSale,
-    setIsCreatingRegisteredSale,
-  ] = useState(false);
+  const [isCreatingRegisteredSale, setIsCreatingRegisteredSale] =
+    useState(false);
 
-  const [
-    registeredSaleError,
-    setRegisteredSaleError,
-  ] = useState<string | null>(
+  const [registeredSaleError, setRegisteredSaleError] = useState<string | null>(
     null,
   );
 
-  const [
-    registeredSaleSuccess,
-    setRegisteredSaleSuccess,
-  ] = useState<string | null>(
-    null,
-  );
+  const [registeredSaleSuccess, setRegisteredSaleSuccess] = useState<
+    string | null
+  >(null);
 
   /*
    * Sala
    */
 
-  const loadRoom =
-    useCallback(
-      async (
-        showFullLoading = true,
-      ): Promise<boolean> => {
-        if (showFullLoading) {
-          setIsLoading(true);
-        }
+  const loadRoom = useCallback(
+    async (showFullLoading = true): Promise<boolean> => {
+      if (showFullLoading) {
+        setIsLoading(true);
+      }
 
-        setError(null);
+      setError(null);
 
-        try {
-          const [
-            stations,
-            registeredSessions,
-            guestSessions,
-          ] = await Promise.all([
+      try {
+        const [stations, registeredSessions, guestSessions] = await Promise.all(
+          [
             listStations(),
             listActiveRegisteredSessions(),
             listActiveGuestSessions(),
-          ]);
+          ],
+        );
 
-          setRoomStations(
-            buildRoomStations(
-              stations,
-              registeredSessions,
-              guestSessions,
-            ),
-          );
+        setRoomStations(
+          buildRoomStations(stations, registeredSessions, guestSessions),
+        );
 
-          return true;
-        } catch {
-          setError(
-            "No fue posible cargar el estado de la sala.",
-          );
+        return true;
+      } catch {
+        setError("No fue posible cargar el estado de la sala.");
 
-          return false;
-        } finally {
-          if (showFullLoading) {
-            setIsLoading(false);
-          }
+        return false;
+      } finally {
+        if (showFullLoading) {
+          setIsLoading(false);
         }
-      },
-      [],
-    );
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void loadRoom();
@@ -459,66 +320,41 @@ export function RoomPage() {
    * Venta GUEST
    */
 
-  async function handleOpenGuestSale(
-    station: Station,
-  ) {
-    if (
-      isCreatingRegisteredSale
-    ) {
+  async function handleOpenGuestSale(station: Station) {
+    if (isCreatingRegisteredSale) {
       return;
     }
 
-    setIsRegisteredSaleOpen(
-      false,
-    );
+    setIsRegisteredSaleOpen(false);
 
     setCustomerQuery("");
     setActiveCustomers([]);
     setSelectedCustomer(null);
 
-    setCustomerSearchError(
-      null,
-    );
+    setCustomerSearchError(null);
 
-    setRegisteredSaleError(
-      null,
-    );
+    setRegisteredSaleError(null);
 
-    setRegisteredSaleSuccess(
-      null,
-    );
+    setRegisteredSaleSuccess(null);
 
-    setSelectedGuestStation(
-      station,
-    );
+    setSelectedGuestStation(station);
 
     setTimeProducts([]);
 
-    setSelectedTimeProductId(
-      null,
-    );
+    setSelectedTimeProductId(null);
 
     setGuestSaleError(null);
 
-    setIsLoadingTimeProducts(
-      true,
-    );
+    setIsLoadingTimeProducts(true);
 
     try {
-      const products =
-        await listActiveTimeProducts();
+      const products = await listActiveTimeProducts();
 
-      setTimeProducts(
-        products,
-      );
+      setTimeProducts(products);
     } catch {
-      setGuestSaleError(
-        "No fue posible cargar las tarifas activas.",
-      );
+      setGuestSaleError("No fue posible cargar las tarifas activas.");
     } finally {
-      setIsLoadingTimeProducts(
-        false,
-      );
+      setIsLoadingTimeProducts(false);
     }
   }
 
@@ -527,65 +363,42 @@ export function RoomPage() {
       return;
     }
 
-    setSelectedGuestStation(
-      null,
-    );
+    setSelectedGuestStation(null);
 
     setTimeProducts([]);
 
-    setSelectedTimeProductId(
-      null,
-    );
+    setSelectedTimeProductId(null);
 
     setGuestSaleError(null);
   }
 
   async function handleCreateGuestSale() {
-    if (
-      selectedGuestStation ===
-        null ||
-      selectedTimeProductId ===
-        null
-    ) {
+    if (selectedGuestStation === null || selectedTimeProductId === null) {
       return;
     }
 
-    setIsCreatingGuestSale(
-      true,
-    );
+    setIsCreatingGuestSale(true);
 
     setGuestSaleError(null);
 
     try {
       await createGuestTimeSale({
         sale_type: "GUEST",
-        time_product_id:
-          selectedTimeProductId,
-        station_id:
-          selectedGuestStation.id,
+        time_product_id: selectedTimeProductId,
+        station_id: selectedGuestStation.id,
       });
 
-      setSelectedGuestStation(
-        null,
-      );
+      setSelectedGuestStation(null);
 
       setTimeProducts([]);
 
-      setSelectedTimeProductId(
-        null,
-      );
+      setSelectedTimeProductId(null);
 
       await loadRoom(false);
     } catch (saleError) {
-      setGuestSaleError(
-        getGuestSaleErrorMessage(
-          saleError,
-        ),
-      );
+      setGuestSaleError(getGuestSaleErrorMessage(saleError));
     } finally {
-      setIsCreatingGuestSale(
-        false,
-      );
+      setIsCreatingGuestSale(false);
     }
   }
 
@@ -594,21 +407,15 @@ export function RoomPage() {
    */
 
   async function handleOpenRegisteredSale() {
-    if (
-      isCreatingGuestSale
-    ) {
+    if (isCreatingGuestSale) {
       return;
     }
 
-    setSelectedGuestStation(
-      null,
-    );
+    setSelectedGuestStation(null);
 
     setGuestSaleError(null);
 
-    setIsRegisteredSaleOpen(
-      true,
-    );
+    setIsRegisteredSaleOpen(true);
 
     setCustomerQuery("");
 
@@ -616,87 +423,53 @@ export function RoomPage() {
 
     setSelectedCustomer(null);
 
-    setCustomerSearchError(
-      null,
-    );
+    setCustomerSearchError(null);
 
     setTimeProducts([]);
 
-    setSelectedTimeProductId(
-      null,
-    );
+    setSelectedTimeProductId(null);
 
-    setRegisteredSaleError(
-      null,
-    );
+    setRegisteredSaleError(null);
 
-    setRegisteredSaleSuccess(
-      null,
-    );
+    setRegisteredSaleSuccess(null);
 
-    setIsLoadingTimeProducts(
-      true,
-    );
+    setIsLoadingTimeProducts(true);
 
-    setIsSearchingCustomers(
-      true,
-    );
+    setIsSearchingCustomers(true);
 
     try {
-      const products =
-        await listActiveTimeProducts();
+      const products = await listActiveTimeProducts();
 
-      setTimeProducts(
-        products,
-      );
+      setTimeProducts(products);
     } catch {
-      setRegisteredSaleError(
-        "No fue posible cargar las tarifas activas.",
-      );
+      setRegisteredSaleError("No fue posible cargar las tarifas activas.");
     } finally {
-      setIsLoadingTimeProducts(
-        false,
-      );
+      setIsLoadingTimeProducts(false);
     }
 
     try {
-      const customers =
-        await listCustomers({
-          isActive: true,
-          limit: 100,
-          offset: 0,
-        });
+      const customers = await listCustomers({
+        isActive: true,
+        limit: 100,
+        offset: 0,
+      });
 
-      const activeOnly =
-        customers.filter(
-          (customer) =>
-            customer.is_active,
-        );
+      const activeOnly = customers.filter((customer) => customer.is_active);
 
-      setActiveCustomers(
-        activeOnly,
-      );
+      setActiveCustomers(activeOnly);
     } catch {
-      setCustomerSearchError(
-        "No fue posible cargar los clientes activos.",
-      );
+      setCustomerSearchError("No fue posible cargar los clientes activos.");
     } finally {
-      setIsSearchingCustomers(
-        false,
-      );
+      setIsSearchingCustomers(false);
     }
   }
 
   function handleCloseRegisteredSale() {
-    if (
-      isCreatingRegisteredSale
-    ) {
+    if (isCreatingRegisteredSale) {
       return;
     }
 
-    setIsRegisteredSaleOpen(
-      false,
-    );
+    setIsRegisteredSaleOpen(false);
 
     setCustomerQuery("");
 
@@ -704,141 +477,80 @@ export function RoomPage() {
 
     setSelectedCustomer(null);
 
-    setCustomerSearchError(
-      null,
-    );
+    setCustomerSearchError(null);
 
     setTimeProducts([]);
 
-    setSelectedTimeProductId(
-      null,
-    );
+    setSelectedTimeProductId(null);
 
-    setRegisteredSaleError(
-      null,
-    );
+    setRegisteredSaleError(null);
 
-    setRegisteredSaleSuccess(
-      null,
-    );
+    setRegisteredSaleSuccess(null);
   }
 
-  function handleCustomerQueryChange(
-    value: string,
-  ) {
+  function handleCustomerQueryChange(value: string) {
     setCustomerQuery(value);
 
     setSelectedCustomer(null);
 
-    setSelectedTimeProductId(
-      null,
-    );
+    setSelectedTimeProductId(null);
 
-    setCustomerSearchError(
-      null,
-    );
+    setCustomerSearchError(null);
 
-    setRegisteredSaleError(
-      null,
-    );
+    setRegisteredSaleError(null);
 
-    setRegisteredSaleSuccess(
-      null,
-    );
+    setRegisteredSaleSuccess(null);
   }
 
-  function handleSelectCustomer(
-    customer: CustomerSummary,
-  ) {
+  function handleSelectCustomer(customer: CustomerSummary) {
     if (!customer.is_active) {
       return;
     }
 
-    setSelectedCustomer(
-      customer,
-    );
+    setSelectedCustomer(customer);
 
-    setSelectedTimeProductId(
-      null,
-    );
+    setSelectedTimeProductId(null);
 
-    setCustomerSearchError(
-      null,
-    );
+    setCustomerSearchError(null);
 
-    setRegisteredSaleError(
-      null,
-    );
+    setRegisteredSaleError(null);
 
-    setRegisteredSaleSuccess(
-      null,
-    );
+    setRegisteredSaleSuccess(null);
   }
 
   async function handleCreateRegisteredSale() {
-    if (
-      selectedCustomer ===
-        null ||
-      selectedTimeProductId ===
-        null
-    ) {
+    if (selectedCustomer === null || selectedTimeProductId === null) {
       return;
     }
 
-    setIsCreatingRegisteredSale(
-      true,
-    );
+    setIsCreatingRegisteredSale(true);
 
-    setRegisteredSaleError(
-      null,
-    );
+    setRegisteredSaleError(null);
 
-    setRegisteredSaleSuccess(
-      null,
-    );
+    setRegisteredSaleSuccess(null);
 
     try {
-      const response =
-        await createRegisteredTimeSale(
-          {
-            sale_type:
-              "REGISTERED",
-            time_product_id:
-              selectedTimeProductId,
-            customer_id:
-              selectedCustomer.id,
-          },
-        );
+      const response = await createRegisteredTimeSale({
+        sale_type: "REGISTERED",
+        time_product_id: selectedTimeProductId,
+        customer_id: selectedCustomer.id,
+      });
 
-      const updatedCustomer: CustomerSummary =
-        {
-          ...selectedCustomer,
-          available_seconds:
-            response.available_seconds,
-          reserved_seconds:
-            response.reserved_seconds,
-        };
+      const updatedCustomer: CustomerSummary = {
+        ...selectedCustomer,
+        available_seconds: response.available_seconds,
+        reserved_seconds: response.reserved_seconds,
+      };
 
-      setSelectedCustomer(
-        updatedCustomer,
+      setSelectedCustomer(updatedCustomer);
+
+      setActiveCustomers((currentCustomers) =>
+        currentCustomers.map((customer) =>
+          customer.id === updatedCustomer.id ? updatedCustomer : customer,
+        ),
       );
 
-      setActiveCustomers(
-        (
-          currentCustomers,
-        ) =>
-          currentCustomers.map(
-            (customer) =>
-              customer.id ===
-              updatedCustomer.id
-                ? updatedCustomer
-                : customer,
-          ),
-      );
-
-      setSelectedTimeProductId(
-        null,
-      );
+      setSelectedTimeProductId(null);
 
       setRegisteredSaleSuccess(
         `${response.product_name} acreditado correctamente. Nuevo saldo: ${formatDuration(
@@ -846,15 +558,9 @@ export function RoomPage() {
         )}.`,
       );
     } catch (saleError) {
-      setRegisteredSaleError(
-        getRegisteredSaleErrorMessage(
-          saleError,
-        ),
-      );
+      setRegisteredSaleError(getRegisteredSaleErrorMessage(saleError));
     } finally {
-      setIsCreatingRegisteredSale(
-        false,
-      );
+      setIsCreatingRegisteredSale(false);
     }
   }
 
@@ -862,108 +568,50 @@ export function RoomPage() {
    * Resumen de estaciones
    */
 
-  const summary =
-    roomStations.reduce<
-      Record<
-        StationStatus,
-        number
-      >
-    >(
-      (
-        currentSummary,
-        roomStation,
-      ) => {
-        currentSummary[
-          roomStation.station.status
-        ] += 1;
+  const summary = roomStations.reduce<Record<StationStatus, number>>(
+    (currentSummary, roomStation) => {
+      currentSummary[roomStation.station.status] += 1;
 
-        return currentSummary;
-      },
-      {
-        AVAILABLE: 0,
-        IN_USE: 0,
-        MAINTENANCE: 0,
-        OFFLINE: 0,
-      },
-    );
+      return currentSummary;
+    },
+    {
+      AVAILABLE: 0,
+      IN_USE: 0,
+      MAINTENANCE: 0,
+      OFFLINE: 0,
+    },
+  );
 
   /*
    * Filtro de clientes en tiempo real
    */
 
-  const normalizedCustomerQuery =
-    normalizeSearchText(
-      customerQuery,
-    );
+  const normalizedCustomerQuery = normalizeSearchText(customerQuery);
 
   const filteredCustomers =
-    activeCustomers.filter(
-      (customer) => {
-        if (
-          normalizedCustomerQuery.length ===
-          0
-        ) {
-          return true;
-        }
+    normalizedCustomerQuery === ""
+      ? activeCustomers
+      : activeCustomers.filter((customer) => {
+          const displayName = normalizeSearchText(customer.display_name);
 
-        const displayName =
-          normalizeSearchText(
-            customer.display_name,
+          const username = normalizeSearchText(customer.username);
+
+          return (
+            displayName.includes(normalizedCustomerQuery) ||
+            username.includes(normalizedCustomerQuery)
           );
-
-        const username =
-          normalizeSearchText(
-            customer.username,
-          );
-
-        const searchableText =
-          `${displayName} ${username}`;
-
-        const compactSearchableText =
-          searchableText.replace(
-            /\s/g,
-            "",
-          );
-
-        const compactQuery =
-          normalizedCustomerQuery.replace(
-            /\s/g,
-            "",
-          );
-
-        const queryWords =
-          normalizedCustomerQuery
-            .split(" ")
-            .filter(Boolean);
-
-        return (
-          queryWords.every(
-            (word) =>
-              searchableText.includes(
-                word,
-              ),
-          ) ||
-          compactSearchableText.includes(
-            compactQuery,
-          )
-        );
-      },
-    );
+        });
 
   return (
     <section className="room-page">
       <header className="page-header room-page-header">
         <div>
-          <p className="eyebrow">
-            GCMS Admin
-          </p>
+          <p className="eyebrow">GCMS Admin</p>
 
           <h1>Sala</h1>
 
           <p className="page-description">
-            Estado operativo actual
-            de los computadores del
-            gaming center.
+            Estado operativo actual de los computadores del gaming center.
           </p>
         </div>
 
@@ -971,13 +619,8 @@ export function RoomPage() {
           <button
             type="button"
             className="primary-button"
-            onClick={() =>
-              void handleOpenRegisteredSale()
-            }
-            disabled={
-              isCreatingGuestSale ||
-              isCreatingRegisteredSale
-            }
+            onClick={() => void handleOpenRegisteredSale()}
+            disabled={isCreatingGuestSale || isCreatingRegisteredSale}
           >
             Recargar cliente
           </button>
@@ -985,85 +628,51 @@ export function RoomPage() {
           <button
             type="button"
             className="secondary-button"
-            onClick={() =>
-              void handleRefresh()
-            }
-            disabled={
-              isRefreshing
-            }
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing}
           >
-            {isRefreshing
-              ? "Actualizando..."
-              : "Actualizar"}
+            {isRefreshing ? "Actualizando..." : "Actualizar"}
           </button>
         </div>
       </header>
 
       {error && (
-        <p
-          className="form-error"
-          role="alert"
-        >
+        <p className="form-error" role="alert">
           {error}
         </p>
       )}
 
       {isLoading ? (
+        <div className="content-state">Cargando estado de la sala...</div>
+      ) : roomStations.length === 0 ? (
         <div className="content-state">
-          Cargando estado de la
-          sala...
-        </div>
-      ) : roomStations.length ===
-        0 ? (
-        <div className="content-state">
-          Todavía no hay estaciones
-          registradas.
+          Todavía no hay estaciones registradas.
         </div>
       ) : (
         <>
           <section className="room-summary">
             <article className="room-summary-card available">
-              <strong>
-                {
-                  summary.AVAILABLE
-                }
-              </strong>
+              <strong>{summary.AVAILABLE}</strong>
 
-              <span>
-                Disponibles
-              </span>
+              <span>Disponibles</span>
             </article>
 
             <article className="room-summary-card in-use">
-              <strong>
-                {summary.IN_USE}
-              </strong>
+              <strong>{summary.IN_USE}</strong>
 
-              <span>
-                En uso
-              </span>
+              <span>En uso</span>
             </article>
 
             <article className="room-summary-card maintenance">
-              <strong>
-                {
-                  summary.MAINTENANCE
-                }
-              </strong>
+              <strong>{summary.MAINTENANCE}</strong>
 
-              <span>
-                Mantenimiento
-              </span>
+              <span>Mantenimiento</span>
             </article>
 
             <article className="room-summary-card offline">
-              <strong>
-                {summary.OFFLINE}
-              </strong>
+              <strong>{summary.OFFLINE}</strong>
 
-              <span>
-                Fuera de línea
-              </span>
+              <span>Fuera de línea</span>
             </article>
           </section>
 
@@ -1073,31 +682,20 @@ export function RoomPage() {
             <section className="room-registered-sale-panel">
               <header className="room-registered-sale-header">
                 <div>
-                  <p className="eyebrow">
-                    Venta REGISTERED
-                  </p>
+                  <p className="eyebrow">Venta REGISTERED</p>
 
-                  <h2>
-                    Recargar cliente
-                  </h2>
+                  <h2>Recargar cliente</h2>
 
                   <p className="page-description">
-                    Busca la cuenta
-                    del cliente que
-                    comprará tiempo.
+                    Busca la cuenta del cliente que comprará tiempo.
                   </p>
                 </div>
 
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={
-                    handleCloseRegisteredSale
-                  }
-                  disabled={
-                    isSearchingCustomers ||
-                    isCreatingRegisteredSale
-                  }
+                  onClick={handleCloseRegisteredSale}
+                  disabled={isSearchingCustomers || isCreatingRegisteredSale}
                 >
                   Cancelar
                 </button>
@@ -1105,46 +703,26 @@ export function RoomPage() {
 
               <div className="room-customer-search">
                 <label className="form-field room-customer-search-field">
-                  <span>
-                    Buscar cliente
-                    activo
-                  </span>
+                  <span>Buscar cliente activo</span>
 
                   <input
                     type="search"
-                    value={
-                      customerQuery
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      handleCustomerQueryChange(
-                        event.target
-                          .value,
-                      )
+                    value={customerQuery}
+                    onChange={(event) =>
+                      handleCustomerQueryChange(event.target.value)
                     }
                     placeholder="Nombre o usuario"
                     autoComplete="off"
-                    disabled={
-                      isSearchingCustomers ||
-                      isCreatingRegisteredSale
-                    }
+                    disabled={isSearchingCustomers || isCreatingRegisteredSale}
                   />
                 </label>
 
-                {customerQuery.length >
-                  0 && (
+                {customerQuery.length > 0 && (
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={() =>
-                      handleCustomerQueryChange(
-                        "",
-                      )
-                    }
-                    disabled={
-                      isCreatingRegisteredSale
-                    }
+                    onClick={() => handleCustomerQueryChange("")}
+                    disabled={isCreatingRegisteredSale}
                   >
                     Limpiar
                   </button>
@@ -1152,124 +730,72 @@ export function RoomPage() {
               </div>
 
               {customerSearchError && (
-                <p
-                  className="form-error"
-                  role="alert"
-                >
-                  {
-                    customerSearchError
-                  }
+                <p className="form-error" role="alert">
+                  {customerSearchError}
                 </p>
               )}
 
               {isSearchingCustomers && (
                 <div className="content-state">
-                  Cargando clientes
-                  activos...
+                  Cargando clientes activos...
                 </div>
               )}
 
               {!isSearchingCustomers &&
-                activeCustomers.length ===
-                  0 &&
-                customerSearchError ===
-                  null && (
+                activeCustomers.length === 0 &&
+                customerSearchError === null && (
                   <div className="content-state">
-                    No hay clientes
-                    activos
-                    registrados.
+                    No hay clientes activos registrados.
                   </div>
                 )}
 
-              {!isSearchingCustomers &&
-                filteredCustomers.length >
-                  0 && (
-                  <div className="room-customer-results">
-                    {filteredCustomers.map(
-                      (customer) => {
-                        const isSelected =
-                          selectedCustomer?.id ===
-                          customer.id;
+              {!isSearchingCustomers && filteredCustomers.length > 0 && (
+                <div className="room-customer-results">
+                  {filteredCustomers.map((customer) => {
+                    const isSelected = selectedCustomer?.id === customer.id;
 
-                        return (
-                          <button
-                            key={
-                              customer.id
-                            }
-                            type="button"
-                            className={`room-customer-option ${
-                              isSelected
-                                ? "selected"
-                                : ""
-                            }`}
-                            aria-pressed={
-                              isSelected
-                            }
-                            disabled={
-                              isCreatingRegisteredSale
-                            }
-                            onClick={() =>
-                              handleSelectCustomer(
-                                customer,
-                              )
-                            }
-                          >
-                            <div>
-                              <strong>
-                                {
-                                  customer.display_name
-                                }
-                              </strong>
+                    return (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        className={`room-customer-option ${
+                          isSelected ? "selected" : ""
+                        }`}
+                        aria-pressed={isSelected}
+                        disabled={isCreatingRegisteredSale}
+                        onClick={() => handleSelectCustomer(customer)}
+                      >
+                        <div>
+                          <strong>{customer.display_name}</strong>
 
-                              <span>
-                                @
-                                {
-                                  customer.username
-                                }
-                              </span>
-                            </div>
+                          <span>@{customer.username}</span>
+                        </div>
 
-                            <div className="room-customer-balance">
-                              <span>
-                                Saldo
-                                disponible
-                              </span>
+                        <div className="room-customer-balance">
+                          <span>Saldo disponible</span>
 
-                              <strong>
-                                {formatDuration(
-                                  customer.available_seconds,
-                                )}
-                              </strong>
-                            </div>
-                          </button>
-                        );
-                      },
-                    )}
-                  </div>
-                )}
+                          <strong>
+                            {formatDuration(customer.available_seconds)}
+                          </strong>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {!isSearchingCustomers &&
-                customerQuery.trim()
-                  .length > 0 &&
-                filteredCustomers.length ===
-                  0 &&
-                activeCustomers.length >
-                  0 && (
+                customerQuery.trim().length > 0 &&
+                filteredCustomers.length === 0 &&
+                activeCustomers.length > 0 && (
                   <div className="content-state">
-                    No se encontraron
-                    clientes activos con
-                    ese nombre o usuario.
+                    No se encontraron clientes activos con ese nombre o usuario.
                   </div>
                 )}
 
               {registeredSaleError && (
-                <p
-                  className="form-error"
-                  role="alert"
-                >
-                  {
-                    registeredSaleError
-                  }
+                <p className="form-error" role="alert">
+                  {registeredSaleError}
                 </p>
               )}
 
@@ -1278,133 +804,80 @@ export function RoomPage() {
                   <section className="room-selected-customer">
                     <div>
                       <span className="summary-label">
-                        Cliente
-                        seleccionado
+                        Cliente seleccionado
                       </span>
 
-                      <strong>
-                        {
-                          selectedCustomer.display_name
-                        }
-                      </strong>
+                      <strong>{selectedCustomer.display_name}</strong>
 
-                      <span>
-                        @
-                        {
-                          selectedCustomer.username
-                        }
-                      </span>
+                      <span>@{selectedCustomer.username}</span>
                     </div>
 
                     <div>
-                      <span className="summary-label">
-                        Saldo actual
-                      </span>
+                      <span className="summary-label">Saldo actual</span>
 
                       <strong>
-                        {formatDuration(
-                          selectedCustomer.available_seconds,
-                        )}
+                        {formatDuration(selectedCustomer.available_seconds)}
                       </strong>
                     </div>
                   </section>
 
                   {registeredSaleSuccess && (
-                    <p
-                      className="form-success"
-                      role="status"
-                    >
-                      {
-                        registeredSaleSuccess
-                      }
+                    <p className="form-success" role="status">
+                      {registeredSaleSuccess}
                     </p>
                   )}
 
                   {isLoadingTimeProducts ? (
+                    <div className="content-state">Cargando tarifas...</div>
+                  ) : timeProducts.length === 0 ? (
                     <div className="content-state">
-                      Cargando
-                      tarifas...
-                    </div>
-                  ) : timeProducts.length ===
-                    0 ? (
-                    <div className="content-state">
-                      No hay tarifas
-                      activas
-                      disponibles.
+                      No hay tarifas activas disponibles.
                     </div>
                   ) : (
                     <>
                       <div className="room-product-grid">
-                        {timeProducts.map(
-                          (product) => {
-                            const isSelected =
-                              selectedTimeProductId ===
-                              product.id;
+                        {timeProducts.map((product) => {
+                          const isSelected =
+                            selectedTimeProductId === product.id;
 
-                            return (
-                              <button
-                                key={
-                                  product.id
-                                }
-                                type="button"
-                                className={`room-product-option ${
-                                  isSelected
-                                    ? "selected"
-                                    : ""
-                                }`}
-                                aria-pressed={
-                                  isSelected
-                                }
-                                disabled={
-                                  isCreatingRegisteredSale
-                                }
-                                onClick={() => {
-                                  setSelectedTimeProductId(
-                                    product.id,
-                                  );
+                          return (
+                            <button
+                              key={product.id}
+                              type="button"
+                              className={`room-product-option ${
+                                isSelected ? "selected" : ""
+                              }`}
+                              aria-pressed={isSelected}
+                              disabled={isCreatingRegisteredSale}
+                              onClick={() => {
+                                setSelectedTimeProductId(product.id);
 
-                                  setRegisteredSaleError(
-                                    null,
-                                  );
+                                setRegisteredSaleError(null);
 
-                                  setRegisteredSaleSuccess(
-                                    null,
-                                  );
-                                }}
-                              >
-                                <strong>
-                                  {
-                                    product.name
-                                  }
-                                </strong>
+                                setRegisteredSaleSuccess(null);
+                              }}
+                            >
+                              <strong>{product.name}</strong>
 
-                                <span>
-                                  {formatRemainingTime(
-                                    product.duration_seconds,
-                                  )}
-                                </span>
+                              <span>
+                                {formatRemainingTime(product.duration_seconds)}
+                              </span>
 
-                                <span className="room-product-price">
-                                  {formatPriceClp(
-                                    product.price_clp,
-                                  )}
-                                </span>
-                              </button>
-                            );
-                          },
-                        )}
+                              <span className="room-product-price">
+                                {formatPriceClp(product.price_clp)}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
 
                       <div className="room-guest-sale-actions">
                         <button
                           type="button"
                           className="primary-button"
-                          onClick={() =>
-                            void handleCreateRegisteredSale()
-                          }
+                          onClick={() => void handleCreateRegisteredSale()}
                           disabled={
-                            selectedTimeProductId ===
-                              null ||
+                            selectedTimeProductId === null ||
                             isCreatingRegisteredSale
                           }
                         >
@@ -1426,124 +899,75 @@ export function RoomPage() {
             <section className="room-guest-sale-panel">
               <header className="room-guest-sale-header">
                 <div>
-                  <p className="eyebrow">
-                    Venta GUEST
-                  </p>
+                  <p className="eyebrow">Venta GUEST</p>
 
-                  <h2>
-                    Iniciar invitado
-                    en{" "}
-                    {
-                      selectedGuestStation.code
-                    }
-                  </h2>
+                  <h2>Iniciar invitado en {selectedGuestStation.code}</h2>
 
                   <p className="page-description">
-                    Selecciona la
-                    tarifa que pagará
-                    el cliente.
+                    Selecciona la tarifa que pagará el cliente.
                   </p>
                 </div>
 
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={
-                    handleCloseGuestSale
-                  }
-                  disabled={
-                    isCreatingGuestSale
-                  }
+                  onClick={handleCloseGuestSale}
+                  disabled={isCreatingGuestSale}
                 >
                   Cancelar
                 </button>
               </header>
 
               {guestSaleError && (
-                <p
-                  className="form-error"
-                  role="alert"
-                >
+                <p className="form-error" role="alert">
                   {guestSaleError}
                 </p>
               )}
 
               {isLoadingTimeProducts ? (
+                <div className="content-state">Cargando tarifas...</div>
+              ) : timeProducts.length === 0 ? (
                 <div className="content-state">
-                  Cargando tarifas...
-                </div>
-              ) : timeProducts.length ===
-                0 ? (
-                <div className="content-state">
-                  No hay tarifas
-                  activas disponibles.
+                  No hay tarifas activas disponibles.
                 </div>
               ) : (
                 <>
                   <div className="room-product-grid">
-                    {timeProducts.map(
-                      (product) => {
-                        const isSelected =
-                          selectedTimeProductId ===
-                          product.id;
+                    {timeProducts.map((product) => {
+                      const isSelected = selectedTimeProductId === product.id;
 
-                        return (
-                          <button
-                            key={
-                              product.id
-                            }
-                            type="button"
-                            className={`room-product-option ${
-                              isSelected
-                                ? "selected"
-                                : ""
-                            }`}
-                            aria-pressed={
-                              isSelected
-                            }
-                            onClick={() =>
-                              setSelectedTimeProductId(
-                                product.id,
-                              )
-                            }
-                            disabled={
-                              isCreatingGuestSale
-                            }
-                          >
-                            <strong>
-                              {
-                                product.name
-                              }
-                            </strong>
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          className={`room-product-option ${
+                            isSelected ? "selected" : ""
+                          }`}
+                          aria-pressed={isSelected}
+                          onClick={() => setSelectedTimeProductId(product.id)}
+                          disabled={isCreatingGuestSale}
+                        >
+                          <strong>{product.name}</strong>
 
-                            <span>
-                              {formatRemainingTime(
-                                product.duration_seconds,
-                              )}
-                            </span>
+                          <span>
+                            {formatRemainingTime(product.duration_seconds)}
+                          </span>
 
-                            <span className="room-product-price">
-                              {formatPriceClp(
-                                product.price_clp,
-                              )}
-                            </span>
-                          </button>
-                        );
-                      },
-                    )}
+                          <span className="room-product-price">
+                            {formatPriceClp(product.price_clp)}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <div className="room-guest-sale-actions">
                     <button
                       type="button"
                       className="primary-button"
-                      onClick={() =>
-                        void handleCreateGuestSale()
-                      }
+                      onClick={() => void handleCreateGuestSale()}
                       disabled={
-                        selectedTimeProductId ===
-                          null ||
-                        isCreatingGuestSale
+                        selectedTimeProductId === null || isCreatingGuestSale
                       }
                     >
                       {isCreatingGuestSale
@@ -1559,206 +983,132 @@ export function RoomPage() {
           {/* ESTACIONES */}
 
           <section className="room-grid">
-            {roomStations.map(
-              ({
-                station,
-                session,
-              }) => (
-                <article
-                  key={
-                    station.id
-                  }
-                  className={`room-station-card ${station.status
-                    .toLowerCase()
-                    .replace(
-                      "_",
-                      "-",
-                    )} ${
-                    selectedGuestStation?.id ===
-                    station.id
-                      ? "selected"
-                      : ""
-                  }`}
-                >
-                  <header className="room-station-header">
-                    <h2>
-                      {station.code}
-                    </h2>
+            {roomStations.map(({ station, session }) => (
+              <article
+                key={station.id}
+                className={`room-station-card ${station.status
+                  .toLowerCase()
+                  .replace("_", "-")} ${
+                  selectedGuestStation?.id === station.id ? "selected" : ""
+                }`}
+              >
+                <header className="room-station-header">
+                  <h2>{station.code}</h2>
 
-                    <span
-                      className={`station-status ${station.status.toLowerCase()}`}
-                    >
-                      {
-                        stationStatusLabels[
-                          station
-                            .status
-                        ]
-                      }
-                    </span>
-                  </header>
+                  <span
+                    className={`station-status ${station.status.toLowerCase()}`}
+                  >
+                    {stationStatusLabels[station.status]}
+                  </span>
+                </header>
 
-                  <div className="room-station-content">
-                    {station.status ===
-                      "AVAILABLE" && (
+                <div className="room-station-content">
+                  {station.status === "AVAILABLE" && (
+                    <>
+                      <p className="room-station-main-status">Disponible</p>
+
+                      <p className="room-station-secondary">Lista para usar</p>
+
+                      <button
+                        type="button"
+                        className="room-guest-start-button"
+                        onClick={() => void handleOpenGuestSale(station)}
+                        disabled={isCreatingRegisteredSale}
+                      >
+                        Iniciar invitado
+                      </button>
+                    </>
+                  )}
+
+                  {station.status === "MAINTENANCE" && (
+                    <>
+                      <p className="room-station-main-status">Mantenimiento</p>
+
+                      <p className="room-station-secondary">
+                        Equipo no disponible
+                      </p>
+                    </>
+                  )}
+
+                  {station.status === "OFFLINE" && (
+                    <>
+                      <p className="room-station-main-status">Fuera de línea</p>
+
+                      <p className="room-station-secondary">
+                        Equipo no disponible
+                      </p>
+                    </>
+                  )}
+
+                  {station.status === "IN_USE" && session === null && (
+                    <>
+                      <p className="room-station-main-status">En uso</p>
+
+                      <p className="room-station-secondary">
+                        No se encontró una sesión activa asociada.
+                      </p>
+                    </>
+                  )}
+
+                  {station.status === "IN_USE" &&
+                    session?.type === "REGISTERED" && (
                       <>
-                        <p className="room-station-main-status">
-                          Disponible
+                        <div className="room-session-type">
+                          <span>Registrado</span>
+                        </div>
+
+                        <p className="room-station-customer">
+                          {session.customerName}
                         </p>
 
-                        <p className="room-station-secondary">
-                          Lista para
-                          usar
-                        </p>
+                        <div className="room-time">
+                          <span className="room-time-label">
+                            Tiempo restante
+                          </span>
 
-                        <button
-                          type="button"
-                          className="room-guest-start-button"
-                          onClick={() =>
-                            void handleOpenGuestSale(
-                              station,
-                            )
-                          }
-                          disabled={
-                            isCreatingRegisteredSale
-                          }
+                          <strong>
+                            {formatRemainingTime(session.remainingSeconds)}
+                          </strong>
+                        </div>
+
+                        <span
+                          className={`session-time-state ${session.timeState.toLowerCase()}`}
                         >
-                          Iniciar
-                          invitado
-                        </button>
+                          {session.timeState === "RUNNING"
+                            ? "En curso"
+                            : "Tiempo agotado"}
+                        </span>
                       </>
                     )}
 
-                    {station.status ===
-                      "MAINTENANCE" && (
-                      <>
-                        <p className="room-station-main-status">
-                          Mantenimiento
-                        </p>
+                  {station.status === "IN_USE" && session?.type === "GUEST" && (
+                    <>
+                      <div className="room-session-type">
+                        <span>Invitado</span>
+                      </div>
 
-                        <p className="room-station-secondary">
-                          Equipo no
-                          disponible
-                        </p>
-                      </>
-                    )}
+                      <p className="room-station-customer">Invitado</p>
 
-                    {station.status ===
-                      "OFFLINE" && (
-                      <>
-                        <p className="room-station-main-status">
-                          Fuera de
-                          línea
-                        </p>
+                      <div className="room-time">
+                        <span className="room-time-label">Tiempo restante</span>
 
-                        <p className="room-station-secondary">
-                          Equipo no
-                          disponible
-                        </p>
-                      </>
-                    )}
+                        <strong>
+                          {formatRemainingTime(session.remainingSeconds)}
+                        </strong>
+                      </div>
 
-                    {station.status ===
-                      "IN_USE" &&
-                      session ===
-                        null && (
-                        <>
-                          <p className="room-station-main-status">
-                            En uso
-                          </p>
-
-                          <p className="room-station-secondary">
-                            No se
-                            encontró
-                            una sesión
-                            activa
-                            asociada.
-                          </p>
-                        </>
-                      )}
-
-                    {station.status ===
-                      "IN_USE" &&
-                      session?.type ===
-                        "REGISTERED" && (
-                        <>
-                          <div className="room-session-type">
-                            <span>
-                              Registrado
-                            </span>
-                          </div>
-
-                          <p className="room-station-customer">
-                            {
-                              session.customerName
-                            }
-                          </p>
-
-                          <div className="room-time">
-                            <span className="room-time-label">
-                              Tiempo
-                              restante
-                            </span>
-
-                            <strong>
-                              {formatRemainingTime(
-                                session.remainingSeconds,
-                              )}
-                            </strong>
-                          </div>
-
-                          <span
-                            className={`session-time-state ${session.timeState.toLowerCase()}`}
-                          >
-                            {session.timeState ===
-                            "RUNNING"
-                              ? "En curso"
-                              : "Tiempo agotado"}
-                          </span>
-                        </>
-                      )}
-
-                    {station.status ===
-                      "IN_USE" &&
-                      session?.type ===
-                        "GUEST" && (
-                        <>
-                          <div className="room-session-type">
-                            <span>
-                              Invitado
-                            </span>
-                          </div>
-
-                          <p className="room-station-customer">
-                            Invitado
-                          </p>
-
-                          <div className="room-time">
-                            <span className="room-time-label">
-                              Tiempo
-                              restante
-                            </span>
-
-                            <strong>
-                              {formatRemainingTime(
-                                session.remainingSeconds,
-                              )}
-                            </strong>
-                          </div>
-
-                          <span
-                            className={`session-time-state ${session.timeState.toLowerCase()}`}
-                          >
-                            {session.timeState ===
-                            "RUNNING"
-                              ? "En curso"
-                              : "Tiempo agotado"}
-                          </span>
-                        </>
-                      )}
-                  </div>
-                </article>
-              ),
-            )}
+                      <span
+                        className={`session-time-state ${session.timeState.toLowerCase()}`}
+                      >
+                        {session.timeState === "RUNNING"
+                          ? "En curso"
+                          : "Tiempo agotado"}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </article>
+            ))}
           </section>
         </>
       )}
