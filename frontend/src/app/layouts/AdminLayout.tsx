@@ -4,6 +4,10 @@ import { useAuth } from "../../features/auth/useAuth";
 
 const navigationItems = [
   {
+    to: "/room",
+    label: "Sala",
+  },
+  {
     to: "/customers",
     label: "Clientes",
   },

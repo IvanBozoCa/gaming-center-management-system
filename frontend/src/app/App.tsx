@@ -1,13 +1,17 @@
 import { Navigate, Route, Routes } from "react-router";
-import { CustomersPage } from "./pages/CustomersPage";
+
 import { RequireAdmin } from "../features/auth/RequireAdmin";
+
 import { AdminLayout } from "./layouts/AdminLayout";
+
+import { CustomerDetailPage } from "./pages/CustomerDetailPage";
+import { CustomersPage } from "./pages/CustomersPage";
+import { GuestSessionsPage } from "./pages/GuestSessionsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
-import { StationsPage } from "./pages/StationsPage";
+import { RoomPage } from "./pages/RoomPage";
 import { SessionsPage } from "./pages/SessionsPage";
-import { GuestSessionsPage } from "./pages/GuestSessionsPage";
-import { CustomerDetailPage } from "./pages/CustomerDetailPage";
+import { StationsPage } from "./pages/StationsPage";
 
 export function App() {
   return (
@@ -16,24 +20,35 @@ export function App() {
 
       <Route element={<RequireAdmin />}>
         <Route element={<AdminLayout />}>
+          <Route path="/room" element={<RoomPage />} />
+
           <Route path="/customers" element={<CustomersPage />} />
-          <Route path="/customers/:customerId" element={<CustomerDetailPage />}
+
+          <Route
+            path="/customers/:customerId"
+            element={<CustomerDetailPage />}
           />
 
           <Route path="/stations" element={<StationsPage />} />
 
           <Route path="/sessions" element={<SessionsPage />} />
 
-          <Route path="/guest-sessions" element={<GuestSessionsPage />} />
+          <Route
+            path="/guest-sessions"
+            element={<GuestSessionsPage />}
+          />
         </Route>
       </Route>
 
-      <Route path="/" element={<Navigate to="/customers" replace />} />
+      <Route path="/" element={<Navigate to="/room" replace />} />
 
       <Route
         path="*"
         element={
-          <PlaceholderPage title="404" description="Página no encontrada." />
+          <PlaceholderPage
+            title="404"
+            description="Página no encontrada."
+          />
         }
       />
     </Routes>

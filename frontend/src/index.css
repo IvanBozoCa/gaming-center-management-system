@@ -710,3 +710,308 @@ textarea {
   grid-template-columns: minmax(220px, 350px);
 }
 
+/* ==================================================
+   Room dashboard
+   ================================================== */
+
+.secondary-button {
+  padding: 0.7rem 1rem;
+  border: 1px solid #34415a;
+  border-radius: 8px;
+  color: #e7e9ee;
+  background: #172238;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: #22314f;
+}
+
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.room-page {
+  width: min(1500px, 100%);
+}
+
+.room-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.room-page-header .secondary-button {
+  flex-shrink: 0;
+}
+
+/* Summary */
+
+.room-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.room-summary-card {
+  position: relative;
+  overflow: hidden;
+
+  min-height: 105px;
+  padding: 1.15rem 1.25rem;
+
+  border: 1px solid #253047;
+  border-radius: 12px;
+
+  background: #111a2b;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.room-summary-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+}
+
+.room-summary-card strong {
+  font-size: 2rem;
+  line-height: 1;
+  color: #ffffff;
+}
+
+.room-summary-card span {
+  margin-top: 0.2rem;
+  color: #9da9bc;
+  font-size: 0.9rem;
+}
+
+.room-summary-card.available::before {
+  background: #4b9b65;
+}
+
+.room-summary-card.in-use::before {
+  background: #5882bd;
+}
+
+.room-summary-card.maintenance::before {
+  background: #c59b3d;
+}
+
+.room-summary-card.offline::before {
+  background: #b75a69;
+}
+
+/* Station grid */
+
+.room-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(260px, 1fr)
+  );
+  gap: 1rem;
+}
+
+.room-station-card {
+  position: relative;
+
+  min-height: 245px;
+  padding: 1.25rem;
+
+  border: 1px solid #253047;
+  border-radius: 14px;
+
+  background: #111a2b;
+
+  display: flex;
+  flex-direction: column;
+
+  transition:
+    border-color 150ms ease,
+    transform 150ms ease,
+    background 150ms ease;
+}
+
+.room-station-card:hover {
+  transform: translateY(-2px);
+  border-color: #3c4a64;
+}
+
+.room-station-card.available {
+  border-color: #2c6840;
+}
+
+.room-station-card.in-use {
+  border-color: #34537e;
+}
+
+.room-station-card.maintenance {
+  border-color: #685322;
+}
+
+.room-station-card.offline {
+  border-color: #63323b;
+  background: #121722;
+}
+
+/* Header de cada PC */
+
+.room-station-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+
+  border-bottom: 1px solid #253047;
+}
+
+.room-station-header h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+}
+
+/* Contenido */
+
+.room-station-content {
+  flex: 1;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.room-station-main-status {
+  margin: 0 0 0.35rem;
+
+  font-size: 1.15rem;
+  font-weight: 700;
+
+  color: #e7e9ee;
+}
+
+.room-station-secondary {
+  margin: 0;
+  color: #9da9bc;
+  font-size: 0.9rem;
+}
+
+.room-session-type {
+  margin-bottom: 0.65rem;
+}
+
+.room-session-type span {
+  display: inline-block;
+
+  padding: 0.25rem 0.55rem;
+
+  border: 1px solid #34415a;
+  border-radius: 999px;
+
+  color: #b9c7dc;
+  background: #172238;
+
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.room-station-customer {
+  margin: 0 0 1rem;
+
+  font-size: 1.1rem;
+  font-weight: 700;
+
+  color: #ffffff;
+}
+
+/* Tiempo restante */
+
+.room-time {
+  width: 100%;
+
+  margin-top: auto;
+  margin-bottom: 0.9rem;
+
+  padding-top: 1rem;
+
+  border-top: 1px solid #253047;
+
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.room-time-label {
+  color: #9da9bc;
+  font-size: 0.8rem;
+}
+
+.room-time strong {
+  color: #ffffff;
+
+  font-size: 1.35rem;
+  line-height: 1;
+  text-align: right;
+}
+
+/* Estado agotado */
+
+.room-station-card.in-use:has(
+    .session-time-state.exhausted
+  ) {
+  border-color: #8a6827;
+}
+
+/* Responsive */
+
+@media (max-width: 1100px) {
+  .room-summary {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .room-page-header {
+    flex-direction: column;
+  }
+
+  .room-page-header .secondary-button {
+    width: 100%;
+  }
+
+  .room-summary {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  .room-summary-card {
+    min-height: 90px;
+  }
+
+  .room-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  .room-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
