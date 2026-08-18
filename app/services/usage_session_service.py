@@ -297,75 +297,86 @@ def start_registered_customer_session(
         raise
     
 
+def apply_guest_session_start(
+    db: Session,
+    *,
+    station_id: UUID,
+    authorized_seconds: int,
+) -> GuestSessionStartResult:
+    """
+    Inicia una sesión GUEST sin hacer commit.
+
+    El caller es responsable de confirmar o revertir
+    la transacción.
+    """
+    if authorized_seconds <= 0:
+        raise InvalidAuthorizedTimeError
+
+    station = db.scalar(
+        select(Station)
+        .where(
+            Station.id == station_id
+        )
+        .with_for_update()
+    )
+
+    if station is None:
+        raise SessionStationNotFoundError
+
+    if station.status != "AVAILABLE":
+        raise SessionStationUnavailableError
+
+    active_station_session = db.scalar(
+        select(UsageSession.id)
+        .where(
+            UsageSession.station_id == station.id,
+            UsageSession.status == "ACTIVE",
+        )
+        .limit(1)
+    )
+
+    if active_station_session is not None:
+        raise StationActiveSessionError
+
+    usage_session = UsageSession(
+        station_id=station.id,
+        user_id=None,
+        session_type="GUEST",
+        status="ACTIVE",
+        authorized_seconds=authorized_seconds,
+    )
+
+    station.status = "IN_USE"
+
+    db.add(usage_session)
+
+    db.flush()
+    db.refresh(usage_session)
+
+    return GuestSessionStartResult(
+        session_id=usage_session.id,
+        station_id=station.id,
+        authorized_seconds=(
+            usage_session.authorized_seconds
+        ),
+        session_type=usage_session.session_type,
+        session_status=usage_session.status,
+        station_status=station.status,
+        started_at=usage_session.started_at,
+    )
+
+
 def start_guest_session(
     db: Session,
     *,
     station_id: UUID,
     authorized_seconds: int,
 ) -> GuestSessionStartResult:
-    if authorized_seconds <= 0:
-        raise InvalidAuthorizedTimeError
-
     try:
-        station = db.scalar(
-            select(Station)
-            .where(
-                Station.id == station_id
-            )
-            .with_for_update()
-        )
-
-        if station is None:
-            raise SessionStationNotFoundError
-
-        if station.status != "AVAILABLE":
-            raise SessionStationUnavailableError
-
-        active_station_session = db.scalar(
-            select(UsageSession.id)
-            .where(
-                UsageSession.station_id
-                == station.id,
-                UsageSession.status
-                == "ACTIVE",
-            )
-            .limit(1)
-        )
-
-        if active_station_session is not None:
-            raise StationActiveSessionError
-
-        usage_session = UsageSession(
-            station_id=station.id,
-            user_id=None,
-            session_type="GUEST",
-            status="ACTIVE",
-            authorized_seconds=(
-                authorized_seconds
-            ),
-        )
-
-        station.status = "IN_USE"
-
-        db.add(usage_session)
-
-        db.flush()
-        db.refresh(usage_session)
-
-        result = GuestSessionStartResult(
-            session_id=usage_session.id,
-            station_id=station.id,
-            authorized_seconds=(
-                usage_session.authorized_seconds
-            ),
-            session_type=(
-                usage_session.session_type
-            ),
-            session_status=(
-                usage_session.status
-            ),
-            station_status=station.status,
-            started_at=usage_session.started_at,
+        result = apply_guest_session_start(
+            db,
+            station_id=station_id,
+            authorized_seconds=authorized_seconds,
         )
 
         db.commit()
@@ -374,15 +385,12 @@ def start_guest_session(
 
     except IntegrityError as exc:
         db.rollback()
-
         raise GuestSessionStartConflictError from exc
 
     except Exception:
         db.rollback()
-        raise
-    
-    
-    
+        raise   
+     
 @dataclass(frozen=True)
 class SessionFinishResult:
     session_id: UUID
