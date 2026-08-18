@@ -312,12 +312,15 @@ def test_station_list_response_is_safe_for_admin_ui(
     station = stations[0]
 
     assert set(station.keys()) == {
-        "id",
-        "code",
-        "status",
-        "created_at",
-        "updated_at",
-    }
+    "id",
+    "code",
+    "status",
+    "last_seen_at",
+    "created_at",
+    "updated_at",
+}
+
+    assert station["last_seen_at"] is None
 
 
 @pytest.mark.parametrize(
