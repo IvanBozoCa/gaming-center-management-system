@@ -814,10 +814,7 @@ textarea {
 
 .room-grid {
   display: grid;
-  grid-template-columns: repeat(
-    auto-fill,
-    minmax(260px, 1fr)
-  );
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 1rem;
 }
 
@@ -972,9 +969,7 @@ textarea {
 
 /* Estado agotado */
 
-.room-station-card.in-use:has(
-    .session-time-state.exhausted
-  ) {
+.room-station-card.in-use:has(.session-time-state.exhausted) {
   border-color: #8a6827;
 }
 
@@ -1014,4 +1009,190 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+/* ==================================================
+   Room guest sale
+   ================================================== */
 
+.room-station-card.available.selected {
+  border-color: #69b77f;
+  background: #13251b;
+  box-shadow: 0 0 0 1px #2c6840;
+}
+
+.room-guest-start-button {
+  width: 100%;
+  margin-top: auto;
+  padding: 0.7rem 0.85rem;
+
+  border: 1px solid #2c6840;
+  border-radius: 8px;
+
+  color: #bdf5ce;
+  background: #173524;
+
+  cursor: pointer;
+  font-weight: 700;
+
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.room-guest-start-button:hover {
+  border-color: #4b9b65;
+  background: #20482f;
+}
+
+/* Panel de venta */
+
+.room-guest-sale-panel {
+  margin-bottom: 2rem;
+  padding: 1.4rem;
+
+  border: 1px solid #35558a;
+  border-radius: 14px;
+
+  background: #111a2b;
+}
+
+.room-guest-sale-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+
+  margin-bottom: 1.25rem;
+}
+
+.room-guest-sale-header h2 {
+  margin: 0.45rem 0 0.35rem;
+  font-size: 1.35rem;
+}
+
+.room-guest-sale-header .secondary-button {
+  flex-shrink: 0;
+}
+
+/* Tarifas */
+
+.room-product-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fit, minmax(180px, 1fr));
+
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.room-product-option {
+  min-height: 120px;
+  padding: 1rem;
+
+  border: 1px solid #34415a;
+  border-radius: 10px;
+
+  color: #e7e9ee;
+  background: #0b1220;
+
+  cursor: pointer;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+
+  text-align: left;
+
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+.room-product-option:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #5b6f95;
+  background: #141f33;
+}
+
+.room-product-option.selected {
+  border-color: #7c98c9;
+  background: #172b4d;
+  box-shadow: 0 0 0 1px #35558a;
+}
+
+.room-product-option:focus-visible {
+  outline: 2px solid #8ca7d6;
+  outline-offset: 2px;
+}
+
+.room-product-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.room-product-option strong {
+  font-size: 1rem;
+  color: #ffffff;
+}
+
+.room-product-option > span:not(.room-product-price) {
+  color: #9da9bc;
+  font-size: 0.85rem;
+}
+
+.room-product-price {
+  margin-top: auto;
+
+  color: #ffffff;
+
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+/* Acción final */
+
+.room-guest-sale-actions {
+  display: flex;
+  justify-content: flex-end;
+
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+
+  border-top: 1px solid #253047;
+}
+
+.room-guest-sale-actions .primary-button {
+  min-width: 180px;
+  margin-top: 0;
+}
+
+/* Responsive */
+
+@media (max-width: 700px) {
+  .room-guest-sale-header {
+    flex-direction: column;
+  }
+
+  .room-guest-sale-header .secondary-button {
+    width: 100%;
+  }
+
+  .room-product-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .room-guest-sale-actions {
+    justify-content: stretch;
+  }
+
+  .room-guest-sale-actions .primary-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .room-product-grid {
+    grid-template-columns: 1fr;
+  }
+}

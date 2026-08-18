@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { listStations } from "../../features/stations/api";
-import type {
-  Station,
-  StationStatus,
-} from "../../features/stations/types";
+import type { Station, StationStatus } from "../../features/stations/types";
 
 import { listActiveRegisteredSessions } from "../../features/sessions/api";
 import type { ActiveRegisteredSession } from "../../features/sessions/types";
 
 import { listActiveGuestSessions } from "../../features/guest-sessions/api";
 import type { ActiveGuestSession } from "../../features/guest-sessions/types";
+
+import { ApiError } from "../../lib/http";
+
+import { listActiveTimeProducts } from "../../features/time-products/api";
+import type { TimeProduct } from "../../features/time-products/types";
+
+import { createGuestTimeSale } from "../../features/time-sales/api";
 
 type RoomSession =
   | {
@@ -38,6 +42,38 @@ const stationStatusLabels: Record<StationStatus, string> = {
   MAINTENANCE: "Mantenimiento",
   OFFLINE: "Fuera de línea",
 };
+const clpFormatter = new Intl.NumberFormat("es-CL", {
+  style: "currency",
+  currency: "CLP",
+  maximumFractionDigits: 0,
+});
+
+function formatPriceClp(priceClp: number): string {
+  return clpFormatter.format(priceClp);
+}
+
+function getGuestSaleErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return "No fue posible iniciar la sesión de invitado.";
+  }
+
+  switch (error.message) {
+    case "Station is unavailable":
+      return "La estación dejó de estar disponible. Actualiza Sala e inténtalo nuevamente.";
+
+    case "Time product is inactive":
+      return "La tarifa seleccionada ya no está activa.";
+
+    case "Time product not found":
+      return "La tarifa seleccionada ya no existe.";
+
+    case "Guest session start conflict":
+      return "No fue posible iniciar la sesión porque existe un conflicto con la estación.";
+
+    default:
+      return "No fue posible registrar la venta de invitado.";
+  }
+}
 
 function formatRemainingTime(seconds: number): string {
   const safeSeconds = Math.max(0, seconds);
@@ -129,6 +165,20 @@ export function RoomPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedGuestStation, setSelectedGuestStation] =
+    useState<Station | null>(null);
+
+  const [timeProducts, setTimeProducts] = useState<TimeProduct[]>([]);
+
+  const [selectedTimeProductId, setSelectedTimeProductId] = useState<
+    string | null
+  >(null);
+
+  const [isLoadingTimeProducts, setIsLoadingTimeProducts] = useState(false);
+
+  const [isCreatingGuestSale, setIsCreatingGuestSale] = useState(false);
+
+  const [guestSaleError, setGuestSaleError] = useState<string | null>(null);
 
   const loadRoom = useCallback(
     async (showFullLoading = true): Promise<boolean> => {
@@ -139,22 +189,16 @@ export function RoomPage() {
       setError(null);
 
       try {
-        const [
-          stations,
-          registeredSessions,
-          guestSessions,
-        ] = await Promise.all([
-          listStations(),
-          listActiveRegisteredSessions(),
-          listActiveGuestSessions(),
-        ]);
+        const [stations, registeredSessions, guestSessions] = await Promise.all(
+          [
+            listStations(),
+            listActiveRegisteredSessions(),
+            listActiveGuestSessions(),
+          ],
+        );
 
         setRoomStations(
-          buildRoomStations(
-            stations,
-            registeredSessions,
-            guestSessions,
-          ),
+          buildRoomStations(stations, registeredSessions, guestSessions),
         );
 
         return true;
@@ -181,6 +225,61 @@ export function RoomPage() {
     await loadRoom(false);
 
     setIsRefreshing(false);
+  }
+  async function handleOpenGuestSale(station: Station) {
+    setSelectedGuestStation(station);
+    setTimeProducts([]);
+    setSelectedTimeProductId(null);
+    setGuestSaleError(null);
+    setIsLoadingTimeProducts(true);
+
+    try {
+      const products = await listActiveTimeProducts();
+
+      setTimeProducts(products);
+    } catch {
+      setGuestSaleError("No fue posible cargar las tarifas activas.");
+    } finally {
+      setIsLoadingTimeProducts(false);
+    }
+  }
+
+  function handleCloseGuestSale() {
+    if (isCreatingGuestSale) {
+      return;
+    }
+
+    setSelectedGuestStation(null);
+    setTimeProducts([]);
+    setSelectedTimeProductId(null);
+    setGuestSaleError(null);
+  }
+
+  async function handleCreateGuestSale() {
+    if (selectedGuestStation === null || selectedTimeProductId === null) {
+      return;
+    }
+
+    setIsCreatingGuestSale(true);
+    setGuestSaleError(null);
+
+    try {
+      await createGuestTimeSale({
+        sale_type: "GUEST",
+        time_product_id: selectedTimeProductId,
+        station_id: selectedGuestStation.id,
+      });
+
+      setSelectedGuestStation(null);
+      setTimeProducts([]);
+      setSelectedTimeProductId(null);
+
+      await loadRoom(false);
+    } catch (saleError) {
+      setGuestSaleError(getGuestSaleErrorMessage(saleError));
+    } finally {
+      setIsCreatingGuestSale(false);
+    }
   }
 
   const summary = roomStations.reduce<Record<StationStatus, number>>(
@@ -226,9 +325,7 @@ export function RoomPage() {
       )}
 
       {isLoading ? (
-        <div className="content-state">
-          Cargando estado de la sala...
-        </div>
+        <div className="content-state">Cargando estado de la sala...</div>
       ) : roomStations.length === 0 ? (
         <div className="content-state">
           Todavía no hay estaciones registradas.
@@ -256,6 +353,90 @@ export function RoomPage() {
               <span>Fuera de línea</span>
             </article>
           </section>
+          {selectedGuestStation && (
+            <section className="room-guest-sale-panel">
+              <header className="room-guest-sale-header">
+                <div>
+                  <p className="eyebrow">Venta GUEST</p>
+
+                  <h2>Iniciar invitado en {selectedGuestStation.code}</h2>
+
+                  <p className="page-description">
+                    Selecciona la tarifa que pagará el cliente.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleCloseGuestSale}
+                  disabled={isCreatingGuestSale}
+                >
+                  Cancelar
+                </button>
+              </header>
+
+              {guestSaleError && (
+                <p className="form-error" role="alert">
+                  {guestSaleError}
+                </p>
+              )}
+
+              {isLoadingTimeProducts ? (
+                <div className="content-state">Cargando tarifas...</div>
+              ) : timeProducts.length === 0 ? (
+                <div className="content-state">
+                  No hay tarifas activas disponibles.
+                </div>
+              ) : (
+                <>
+                  <div className="room-product-grid">
+                    {timeProducts.map((product) => {
+                      const isSelected = selectedTimeProductId === product.id;
+
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          className={`room-product-option ${
+                            isSelected ? "selected" : ""
+                          }`}
+                          aria-pressed={isSelected}
+                          onClick={() => setSelectedTimeProductId(product.id)}
+                          disabled={isCreatingGuestSale}
+                        >
+                          <strong>{product.name}</strong>
+
+                          <span>
+                            {formatRemainingTime(product.duration_seconds)}
+                          </span>
+
+                          <span className="room-product-price">
+                            {formatPriceClp(product.price_clp)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="room-guest-sale-actions">
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => void handleCreateGuestSale()}
+                      disabled={
+                        selectedTimeProductId === null || isCreatingGuestSale
+                      }
+                    >
+                      {isCreatingGuestSale
+                        ? "Registrando venta..."
+                        : "Cobrar e iniciar"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
 
           <section className="room-grid">
             {roomStations.map(({ station, session }) => (
@@ -263,7 +444,9 @@ export function RoomPage() {
                 key={station.id}
                 className={`room-station-card ${station.status
                   .toLowerCase()
-                  .replace("_", "-")}`}
+                  .replace("_", "-")} ${
+                  selectedGuestStation?.id === station.id ? "selected" : ""
+                }`}
               >
                 <header className="room-station-header">
                   <h2>{station.code}</h2>
@@ -278,21 +461,23 @@ export function RoomPage() {
                 <div className="room-station-content">
                   {station.status === "AVAILABLE" && (
                     <>
-                      <p className="room-station-main-status">
-                        Disponible
-                      </p>
+                      <p className="room-station-main-status">Disponible</p>
 
-                      <p className="room-station-secondary">
-                        Lista para usar
-                      </p>
+                      <p className="room-station-secondary">Lista para usar</p>
+
+                      <button
+                        type="button"
+                        className="room-guest-start-button"
+                        onClick={() => void handleOpenGuestSale(station)}
+                      >
+                        Iniciar invitado
+                      </button>
                     </>
                   )}
 
                   {station.status === "MAINTENANCE" && (
                     <>
-                      <p className="room-station-main-status">
-                        Mantenimiento
-                      </p>
+                      <p className="room-station-main-status">Mantenimiento</p>
 
                       <p className="room-station-secondary">
                         Equipo no disponible
@@ -302,9 +487,7 @@ export function RoomPage() {
 
                   {station.status === "OFFLINE" && (
                     <>
-                      <p className="room-station-main-status">
-                        Fuera de línea
-                      </p>
+                      <p className="room-station-main-status">Fuera de línea</p>
 
                       <p className="room-station-secondary">
                         Equipo no disponible
@@ -314,9 +497,7 @@ export function RoomPage() {
 
                   {station.status === "IN_USE" && session === null && (
                     <>
-                      <p className="room-station-main-status">
-                        En uso
-                      </p>
+                      <p className="room-station-main-status">En uso</p>
 
                       <p className="room-station-secondary">
                         No se encontró una sesión activa asociada.
@@ -341,9 +522,7 @@ export function RoomPage() {
                           </span>
 
                           <strong>
-                            {formatRemainingTime(
-                              session.remainingSeconds,
-                            )}
+                            {formatRemainingTime(session.remainingSeconds)}
                           </strong>
                         </div>
 
@@ -357,38 +536,31 @@ export function RoomPage() {
                       </>
                     )}
 
-                  {station.status === "IN_USE" &&
-                    session?.type === "GUEST" && (
-                      <>
-                        <div className="room-session-type">
-                          <span>Invitado</span>
-                        </div>
+                  {station.status === "IN_USE" && session?.type === "GUEST" && (
+                    <>
+                      <div className="room-session-type">
+                        <span>Invitado</span>
+                      </div>
 
-                        <p className="room-station-customer">
-                          Invitado
-                        </p>
+                      <p className="room-station-customer">Invitado</p>
 
-                        <div className="room-time">
-                          <span className="room-time-label">
-                            Tiempo restante
-                          </span>
+                      <div className="room-time">
+                        <span className="room-time-label">Tiempo restante</span>
 
-                          <strong>
-                            {formatRemainingTime(
-                              session.remainingSeconds,
-                            )}
-                          </strong>
-                        </div>
+                        <strong>
+                          {formatRemainingTime(session.remainingSeconds)}
+                        </strong>
+                      </div>
 
-                        <span
-                          className={`session-time-state ${session.timeState.toLowerCase()}`}
-                        >
-                          {session.timeState === "RUNNING"
-                            ? "En curso"
-                            : "Tiempo agotado"}
-                        </span>
-                      </>
-                    )}
+                      <span
+                        className={`session-time-state ${session.timeState.toLowerCase()}`}
+                      >
+                        {session.timeState === "RUNNING"
+                          ? "En curso"
+                          : "Tiempo agotado"}
+                      </span>
+                    </>
+                  )}
                 </div>
               </article>
             ))}
