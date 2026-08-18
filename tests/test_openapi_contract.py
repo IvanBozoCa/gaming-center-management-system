@@ -39,6 +39,17 @@ def test_frontend_mvp_openapi_contract():
             "/admin/stations/{station_id}/status",
             "patch",
         ),
+        # Time products
+        ("/admin/time-products", "get"),
+        ("/admin/time-products", "post"),
+        (
+            "/admin/time-products/{time_product_id}",
+            "get",
+        ),
+        (
+            "/admin/time-products/{time_product_id}",
+            "patch",
+        ),
 
         # Registered sessions
         ("/admin/sessions", "post"),
