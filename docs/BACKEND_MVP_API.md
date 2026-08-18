@@ -236,7 +236,80 @@ Orden:
 `unused_seconds` es informativo y no se acredita a ninguna wallet.
 
 ---
+## Productos de tiempo
 
+| Método | Endpoint | Propósito |
+|---|---|---|
+| POST | `/admin/time-products` | Crear producto de tiempo |
+| GET | `/admin/time-products` | Listar productos |
+| GET | `/admin/time-products/{time_product_id}` | Obtener detalle |
+| PATCH | `/admin/time-products/{time_product_id}` | Actualizar producto |
+
+Todos requieren rol `ADMIN`.
+
+Un producto de tiempo representa una oferta comercial reutilizable con:
+
+- `id`
+- `name`
+- `duration_seconds`
+- `price_clp`
+- `is_active`
+- `created_at`
+- `updated_at`
+
+`duration_seconds` representa la cantidad de tiempo que posteriormente
+podrá acreditarse o autorizarse.
+
+`price_clp` representa el precio vigente del producto en pesos chilenos y
+se almacena como entero.
+
+Ejemplo:
+
+```json
+{
+  "name": "1 hora",
+  "duration_seconds": 3600,
+  "price_clp": 2500
+}
+```
+
+### Estados y edición
+
+Los productos no se eliminan físicamente mediante esta API.
+
+Un producto que deja de venderse debe actualizarse con:
+
+```json
+{
+  "is_active": false
+}
+```
+
+El listado acepta el filtro opcional:
+
+`is_active`
+
+Ejemplos:
+
+`GET /admin/time-products?is_active=true`
+
+`GET /admin/time-products?is_active=false`
+
+Cambiar el precio o duración de un producto modifica su configuración
+vigente. Las futuras ventas deberán almacenar sus propios snapshots de
+precio y duración para que el historial no cambie retroactivamente.
+
+### Alcance comercial actual
+
+El catálogo de productos **no registra un pago ni una venta por sí solo**.
+
+En esta etapa:
+
+`TimeProduct` = definición de precio y tiempo.
+
+Una historia posterior será responsable de transformar una selección de
+producto en una venta y aplicar el tiempo correspondiente a una wallet
+REGISTERED o a una sesión GUEST.
 ## Errores HTTP relevantes
 
 El frontend debe tratar especialmente:
