@@ -1,25 +1,31 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   extendRegisteredSession,
   finishRegisteredSession,
   listActiveRegisteredSessions,
-  startRegisteredSession,
   listRegisteredSessionHistory,
 } from "../../features/sessions/api";
+
 import type {
   ActiveRegisteredSession,
-  SessionTimeState,
   FinishedRegisteredSession,
+  SessionTimeState,
 } from "../../features/sessions/types";
-import { formatDuration } from "../../lib/time";
+
 import { listCustomers } from "../../features/customers/api";
+
 import type { CustomerSummary } from "../../features/customers/types";
 
 import { listStations } from "../../features/stations/api";
+
 import type { Station } from "../../features/stations/types";
 
+import { formatDuration } from "../../lib/time";
+
 import { ApiError } from "../../lib/http";
+
+const HISTORY_PAGE_SIZE = 20;
 
 const timeStateLabels: Record<SessionTimeState, string> = {
   RUNNING: "En curso",
@@ -90,33 +96,46 @@ function getFinishErrorMessage(error: unknown): string {
 
   return "No fue posible finalizar la sesión.";
 }
+
 export function SessionsPage() {
+  /*
+   * Sesiones activas
+   */
+
   const [sessions, setSessions] = useState<ActiveRegisteredSession[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [customers, setCustomers] = useState<CustomerSummary[]>([]);
-  const [stations, setStations] = useState<Station[]>([]);
 
-  const [selectedCustomerId, setSelectedCustomerId] = useState("");
-  const [selectedStationId, setSelectedStationId] = useState("");
-  const [authorizedMinutes, setAuthorizedMinutes] = useState("");
+  /*
+   * Acciones sobre sesiones activas
+   */
 
-  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
-  const [isStarting, setIsStarting] = useState(false);
+  const [extensionMinutes, setExtensionMinutes] = useState<
+    Record<string, string>
+  >({});
 
-  const [optionsError, setOptionsError] = useState<string | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
-  const [startSuccess, setStartSuccess] = useState<string | null>(null);
+  const [sessionActionId, setSessionActionId] = useState<string | null>(null);
+
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  /*
+   * Historial
+   */
 
   const [history, setHistory] = useState<FinishedRegisteredSession[]>([]);
 
   const [historyCustomers, setHistoryCustomers] = useState<CustomerSummary[]>(
     [],
   );
+
   const [historyStations, setHistoryStations] = useState<Station[]>([]);
 
   const [historyCustomerId, setHistoryCustomerId] = useState("");
@@ -129,15 +148,9 @@ export function SessionsPage() {
 
   const [historyError, setHistoryError] = useState<string | null>(null);
 
-  const [extensionMinutes, setExtensionMinutes] = useState<
-    Record<string, string>
-  >({});
-  const HISTORY_PAGE_SIZE = 20;
-  const [sessionActionId, setSessionActionId] = useState<string | null>(null);
-
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  /*
+   * Carga de sesiones activas
+   */
 
   const loadSessions = useCallback(
     async (showFullLoading = true): Promise<boolean> => {
@@ -149,6 +162,7 @@ export function SessionsPage() {
 
       try {
         const data = await listActiveRegisteredSessions();
+
         setSessions(data);
 
         return true;
@@ -164,46 +178,23 @@ export function SessionsPage() {
     },
     [],
   );
-  const loadStartOptions = useCallback(async (): Promise<boolean> => {
-    setIsLoadingOptions(true);
-    setOptionsError(null);
 
-    try {
-      const [customerData, stationData] = await Promise.all([
-        listCustomers({
-          isActive: true,
-          limit: 100,
-        }),
-        listStations(),
-      ]);
+  /*
+   * Opciones para filtros del historial
+   */
 
-      setCustomers(customerData);
-
-      setStations(
-        stationData.filter((station) => station.status === "AVAILABLE"),
-      );
-
-      return true;
-    } catch {
-      setOptionsError(
-        "No fue posible cargar clientes y estaciones disponibles.",
-      );
-
-      return false;
-    } finally {
-      setIsLoadingOptions(false);
-    }
-  }, []);
   const loadHistoryOptions = useCallback(async (): Promise<boolean> => {
     try {
       const [customerData, stationData] = await Promise.all([
         listCustomers({
           limit: 100,
         }),
+
         listStations(),
       ]);
 
       setHistoryCustomers(customerData);
+
       setHistoryStations(stationData);
 
       return true;
@@ -211,6 +202,11 @@ export function SessionsPage() {
       return false;
     }
   }, []);
+
+  /*
+   * Historial de sesiones REGISTERED
+   */
+
   const loadHistory = useCallback(
     async (
       offset: number,
@@ -218,13 +214,17 @@ export function SessionsPage() {
       stationId: string,
     ): Promise<boolean> => {
       setIsHistoryLoading(true);
+
       setHistoryError(null);
 
       try {
         const data = await listRegisteredSessionHistory({
           customerId: customerId || undefined,
+
           stationId: stationId || undefined,
+
           limit: HISTORY_PAGE_SIZE,
+
           offset,
         });
 
@@ -242,12 +242,14 @@ export function SessionsPage() {
     [],
   );
 
+  /*
+   * Carga inicial
+   */
+
   useEffect(() => {
     void loadSessions();
   }, [loadSessions]);
-  useEffect(() => {
-    void loadStartOptions();
-  }, [loadStartOptions]);
+
   useEffect(() => {
     void loadHistoryOptions();
   }, [loadHistoryOptions]);
@@ -256,8 +258,13 @@ export function SessionsPage() {
     void loadHistory(historyOffset, historyCustomerId, historyStationId);
   }, [loadHistory, historyOffset, historyCustomerId, historyStationId]);
 
+  /*
+   * Actualizar sesiones activas
+   */
+
   async function handleRefresh() {
     setIsRefreshing(true);
+
     setFeedback(null);
 
     const success = await loadSessions(false);
@@ -269,117 +276,27 @@ export function SessionsPage() {
     setIsRefreshing(false);
   }
 
-  async function handleStartSession(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  /*
+   * Extender una sesión
+   */
 
-    const minutes = Number(authorizedMinutes);
-
-    if (!selectedCustomerId) {
-      setStartError("Selecciona un cliente.");
-      return;
-    }
-
-    if (!selectedStationId) {
-      setStartError("Selecciona una estación.");
-      return;
-    }
-
-    if (!Number.isFinite(minutes) || minutes <= 0) {
-      setStartError("El tiempo autorizado debe ser mayor que cero.");
-      return;
-    }
-
-    const authorizedSeconds = Math.floor(minutes * 60);
-
-    setIsStarting(true);
-    setStartError(null);
-    setStartSuccess(null);
-
-    try {
-      const startedSession = await startRegisteredSession({
-        customer_id: selectedCustomerId,
-        station_id: selectedStationId,
-        authorized_seconds: authorizedSeconds,
-      });
-
-      setSelectedCustomerId("");
-      setSelectedStationId("");
-      setAuthorizedMinutes("");
-
-      setStartSuccess(
-        `Sesión iniciada correctamente por ${formatDuration(
-          startedSession.authorized_seconds,
-        )}.`,
-      );
-
-      const [sessionsUpdated, optionsUpdated] = await Promise.all([
-        loadSessions(false),
-        loadStartOptions(),
-      ]);
-
-      if (!sessionsUpdated || !optionsUpdated) {
-        setStartSuccess(
-          "La sesión fue iniciada, pero no fue posible actualizar toda la pantalla.",
-        );
-      }
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 404) {
-          setStartError("El cliente o la estación ya no existen.");
-        } else if (
-          error.status === 409 &&
-          error.message === "Insufficient time balance"
-        ) {
-          setStartError("El cliente no tiene tiempo disponible suficiente.");
-        } else if (
-          error.status === 409 &&
-          error.message === "Station is not available"
-        ) {
-          setStartError("La estación seleccionada ya no está disponible.");
-        } else if (
-          error.status === 409 &&
-          error.message === "Customer is inactive"
-        ) {
-          setStartError("El cliente seleccionado está inactivo.");
-        } else if (
-          error.status === 409 &&
-          error.message === "Station already has an active session"
-        ) {
-          setStartError("La estación ya tiene una sesión activa.");
-        } else if (
-          error.status === 409 &&
-          error.message === "Customer already has an active session"
-        ) {
-          setStartError("El cliente ya tiene una sesión activa.");
-        } else if (error.status === 409) {
-          setStartError(
-            "No fue posible iniciar la sesión por un conflicto de estado.",
-          );
-        } else if (error.status === 422) {
-          setStartError("El tiempo autorizado no es válido.");
-        } else {
-          setStartError("No fue posible iniciar la sesión.");
-        }
-      } else {
-        setStartError("No fue posible iniciar la sesión.");
-      }
-    } finally {
-      setIsStarting(false);
-    }
-  }
   async function handleExtendSession(session: ActiveRegisteredSession) {
     const rawMinutes = extensionMinutes[session.session_id] ?? "";
+
     const minutes = Number(rawMinutes);
 
     if (!Number.isFinite(minutes) || minutes <= 0) {
       setActionError("Ingresa una cantidad de minutos mayor que cero.");
+
       return;
     }
 
     const additionalSeconds = Math.floor(minutes * 60);
 
     setSessionActionId(session.session_id);
+
     setActionError(null);
+
     setActionSuccess(null);
 
     try {
@@ -392,15 +309,13 @@ export function SessionsPage() {
 
       setExtensionMinutes((current) => ({
         ...current,
+
         [session.session_id]: "",
       }));
 
-      const [sessionsUpdated, optionsUpdated] = await Promise.all([
-        loadSessions(false),
-        loadStartOptions(),
-      ]);
+      const sessionsUpdated = await loadSessions(false);
 
-      if (sessionsUpdated && optionsUpdated) {
+      if (sessionsUpdated) {
         setActionSuccess(
           `${session.station_code} recibió ${formatDuration(
             extendedSession.additional_seconds,
@@ -408,15 +323,20 @@ export function SessionsPage() {
         );
       } else {
         setActionSuccess(
-          "El tiempo fue extendido, pero no fue posible actualizar toda la pantalla.",
+          "El tiempo fue extendido, pero no fue posible actualizar la lista de sesiones.",
         );
       }
-    } catch (error) {
-      setActionError(getExtensionErrorMessage(error));
+    } catch (extensionError) {
+      setActionError(getExtensionErrorMessage(extensionError));
     } finally {
       setSessionActionId(null);
     }
   }
+
+  /*
+   * Finalizar una sesión
+   */
+
   async function handleFinishSession(session: ActiveRegisteredSession) {
     const confirmed = window.confirm(
       `¿Finalizar la sesión de ${session.customer_display_name} en ${session.station_code}?`,
@@ -427,7 +347,9 @@ export function SessionsPage() {
     }
 
     setSessionActionId(session.session_id);
+
     setActionError(null);
+
     setActionSuccess(null);
 
     try {
@@ -440,21 +362,24 @@ export function SessionsPage() {
       );
 
       setExtensionMinutes((current) => {
-        const next = { ...current };
+        const next = {
+          ...current,
+        };
 
         delete next[session.session_id];
 
         return next;
       });
 
-      const [optionsUpdated, historyUpdated] = await Promise.all([
-        loadStartOptions(),
-        loadHistory(historyOffset, historyCustomerId, historyStationId),
-      ]);
+      const historyUpdated = await loadHistory(
+        historyOffset,
+        historyCustomerId,
+        historyStationId,
+      );
 
-      if (!optionsUpdated || !historyUpdated) {
+      if (!historyUpdated) {
         setActionSuccess(
-          "La sesión fue finalizada, pero no fue posible actualizar toda la pantalla.",
+          "La sesión fue finalizada, pero no fue posible actualizar el historial.",
         );
       } else {
         setActionSuccess(
@@ -465,12 +390,13 @@ export function SessionsPage() {
           )} devueltos.`,
         );
       }
-    } catch (error) {
-      setActionError(getFinishErrorMessage(error));
+    } catch (finishError) {
+      setActionError(getFinishErrorMessage(finishError));
     } finally {
       setSessionActionId(null);
     }
   }
+
   return (
     <section className="sessions-page">
       <header className="page-header">
@@ -480,106 +406,14 @@ export function SessionsPage() {
           <h1>Sesiones</h1>
 
           <p className="page-description">
-            Supervisa las sesiones activas de clientes registrados.
+            Supervisa las sesiones activas de clientes registrados. Las recargas
+            se realizan desde Sala y el inicio de sesión no se ejecuta desde el
+            panel administrativo.
           </p>
         </div>
       </header>
-      <section className="session-start-section">
-        <div className="section-header">
-          <div>
-            <h2>Iniciar sesión</h2>
 
-            <p className="page-description">
-              Asigna un cliente registrado a una estación disponible.
-            </p>
-          </div>
-        </div>
-
-        {optionsError && (
-          <p className="form-error" role="alert">
-            {optionsError}
-          </p>
-        )}
-
-        <form className="session-start-form" onSubmit={handleStartSession}>
-          <label className="form-field">
-            <span>Cliente</span>
-
-            <select
-              value={selectedCustomerId}
-              onChange={(event) => setSelectedCustomerId(event.target.value)}
-              disabled={isLoadingOptions || isStarting}
-            >
-              <option value="">Selecciona un cliente</option>
-
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.display_name}
-                  {" · "}
-                  {formatDuration(customer.available_seconds)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="form-field">
-            <span>Estación</span>
-
-            <select
-              value={selectedStationId}
-              onChange={(event) => setSelectedStationId(event.target.value)}
-              disabled={isLoadingOptions || isStarting}
-            >
-              <option value="">Selecciona una estación</option>
-
-              {stations.map((station) => (
-                <option key={station.id} value={station.id}>
-                  {station.code}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="form-field">
-            <span>Minutos</span>
-
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={authorizedMinutes}
-              onChange={(event) => setAuthorizedMinutes(event.target.value)}
-              placeholder="Ej: 60"
-              disabled={isStarting}
-            />
-          </label>
-
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={
-              isStarting ||
-              isLoadingOptions ||
-              customers.length === 0 ||
-              stations.length === 0
-            }
-          >
-            {isStarting ? "Iniciando..." : "Iniciar sesión"}
-          </button>
-        </form>
-
-        {startError && (
-          <p className="form-error" role="alert">
-            {startError}
-          </p>
-        )}
-
-        {startSuccess && (
-          <p className="form-success" role="status">
-            {startSuccess}
-          </p>
-        )}
-      </section>
+      {/* SESIONES ACTIVAS */}
 
       <section className="active-sessions-section">
         <div className="section-header">
@@ -600,6 +434,7 @@ export function SessionsPage() {
             {isRefreshing ? "Actualizando..." : "Actualizar"}
           </button>
         </div>
+
         {actionError && (
           <p className="form-error" role="alert">
             {actionError}
@@ -639,12 +474,19 @@ export function SessionsPage() {
                 <thead>
                   <tr>
                     <th>Estación</th>
+
                     <th>Cliente</th>
+
                     <th>Estado</th>
+
                     <th>Autorizado</th>
+
                     <th>Transcurrido</th>
+
                     <th>Restante</th>
+
                     <th>Inicio</th>
+
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -686,6 +528,7 @@ export function SessionsPage() {
                       </td>
 
                       <td>{formatDateTime(session.started_at)}</td>
+
                       <td>
                         <div className="registered-session-actions">
                           <label className="session-extension-field">
@@ -699,6 +542,7 @@ export function SessionsPage() {
                               onChange={(event) =>
                                 setExtensionMinutes((current) => ({
                                   ...current,
+
                                   [session.session_id]: event.target.value,
                                 }))
                               }
@@ -736,6 +580,9 @@ export function SessionsPage() {
           </>
         )}
       </section>
+
+      {/* HISTORIAL */}
+
       <section className="session-history-section">
         <div className="section-header">
           <div>
@@ -753,6 +600,7 @@ export function SessionsPage() {
               value={historyCustomerId}
               onChange={(event) => {
                 setHistoryCustomerId(event.target.value);
+
                 setHistoryOffset(0);
               }}
             >
@@ -775,6 +623,7 @@ export function SessionsPage() {
               value={historyStationId}
               onChange={(event) => {
                 setHistoryStationId(event.target.value);
+
                 setHistoryOffset(0);
               }}
             >
@@ -808,11 +657,17 @@ export function SessionsPage() {
                 <thead>
                   <tr>
                     <th>Estación</th>
+
                     <th>Cliente</th>
+
                     <th>Autorizado</th>
+
                     <th>Consumido</th>
+
                     <th>Devuelto</th>
+
                     <th>Inicio</th>
+
                     <th>Fin</th>
                   </tr>
                 </thead>

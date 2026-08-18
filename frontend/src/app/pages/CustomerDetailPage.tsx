@@ -1,19 +1,22 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+
 import { Link, useParams } from "react-router";
 
 import {
   getCustomer,
   getCustomerWallet,
   listCustomerTransactions,
-  purchaseCustomerTime,
 } from "../../features/customers/api";
+
 import type {
   CustomerDetail,
   TimeTransaction,
   TimeTransactionType,
   TimeWallet,
 } from "../../features/customers/types";
+
 import { ApiError } from "../../lib/http";
+
 import { formatDuration, formatSignedDuration } from "../../lib/time";
 
 const PAGE_SIZE = 20;
@@ -51,13 +54,9 @@ export function CustomerDetailPage() {
 
   const [error, setError] = useState<string | null>(null);
 
-  const [purchaseMinutes, setPurchaseMinutes] = useState("");
-
-  const [isPurchasing, setIsPurchasing] = useState(false);
-
-  const [purchaseError, setPurchaseError] = useState<string | null>(null);
-
-  const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
+  /*
+   * Cliente y wallet
+   */
 
   useEffect(() => {
     if (!customerId) {
@@ -68,6 +67,7 @@ export function CustomerDetailPage() {
 
     async function loadCustomer() {
       setIsLoadingCustomer(true);
+
       setError(null);
 
       try {
@@ -81,15 +81,16 @@ export function CustomerDetailPage() {
         }
 
         setCustomer(customerData);
+
         setWallet(walletData);
-      } catch (error) {
+      } catch (loadError) {
         if (cancelled) {
           return;
         }
 
-        if (error instanceof ApiError && error.status === 404) {
+        if (loadError instanceof ApiError && loadError.status === 404) {
           setError("El cliente no existe.");
-        } else if (error instanceof ApiError && error.status === 409) {
+        } else if (loadError instanceof ApiError && loadError.status === 409) {
           setError("El cliente no tiene un wallet disponible.");
         } else {
           setError("No fue posible cargar el cliente.");
@@ -107,6 +108,10 @@ export function CustomerDetailPage() {
       cancelled = true;
     };
   }, [customerId]);
+
+  /*
+   * Historial del wallet
+   */
 
   useEffect(() => {
     if (!customerId) {
@@ -146,67 +151,9 @@ export function CustomerDetailPage() {
     };
   }, [customerId, offset]);
 
-  async function handleTimePurchase(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!customerId) {
-      return;
-    }
-
-    const minutes = Number(purchaseMinutes);
-
-    if (!Number.isInteger(minutes) || minutes <= 0) {
-      setPurchaseError("Ingresa una cantidad de minutos mayor a cero.");
-
-      return;
-    }
-
-    const seconds = minutes * 60;
-
-    setIsPurchasing(true);
-    setPurchaseError(null);
-    setPurchaseSuccess(null);
-
-    try {
-      const response = await purchaseCustomerTime(customerId, seconds);
-
-      setWallet({
-        available_seconds: response.available_seconds,
-        reserved_seconds: response.reserved_seconds,
-      });
-
-      const updatedTransactions = await listCustomerTransactions(
-        customerId,
-        PAGE_SIZE,
-        0,
-      );
-
-      setTransactions(updatedTransactions);
-
-      setOffset(0);
-      setPurchaseMinutes("");
-
-      setPurchaseSuccess(`${minutes} min acreditados correctamente.`);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) {
-        setPurchaseError("El cliente no existe.");
-      } else if (
-        error instanceof ApiError &&
-        error.status === 409 &&
-        error.message === "Customer is inactive"
-      ) {
-        setPurchaseError("No se puede cargar tiempo a un cliente inactivo.");
-      } else if (error instanceof ApiError && error.status === 409) {
-        setPurchaseError("El cliente no tiene un wallet disponible.");
-      } else if (error instanceof ApiError && error.status === 422) {
-        setPurchaseError("La cantidad de tiempo no es válida.");
-      } else {
-        setPurchaseError("No fue posible acreditar el tiempo.");
-      }
-    } finally {
-      setIsPurchasing(false);
-    }
-  }
+  /*
+   * Estados iniciales
+   */
 
   if (!customerId) {
     return (
@@ -280,61 +227,14 @@ export function CustomerDetailPage() {
         </article>
       </div>
 
-      <section className="time-purchase-section">
-        <div className="section-header">
-          <div>
-            <h2>Cargar tiempo</h2>
-
-            <p className="page-description">
-              Acredita minutos al saldo disponible del cliente.
-            </p>
-          </div>
-        </div>
-
-        <form className="time-purchase-form" onSubmit={handleTimePurchase}>
-          <label className="form-field">
-            <span>Minutos a acreditar</span>
-
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={purchaseMinutes}
-              onChange={(event) => setPurchaseMinutes(event.target.value)}
-              placeholder="Ej: 60"
-              disabled={isPurchasing}
-            />
-          </label>
-
-          <button
-            className="primary-button"
-            type="submit"
-            disabled={isPurchasing}
-          >
-            {isPurchasing ? "Acreditando..." : "Acreditar tiempo"}
-          </button>
-        </form>
-
-        {purchaseError && (
-          <p className="form-error" role="alert">
-            {purchaseError}
-          </p>
-        )}
-
-        {purchaseSuccess && (
-          <p className="form-success" role="status">
-            {purchaseSuccess}
-          </p>
-        )}
-      </section>
-
       <section className="history-section">
         <div className="section-header">
           <div>
             <h2>Historial de tiempo</h2>
 
             <p className="page-description">
-              Movimientos del wallet, desde el más reciente.
+              Movimientos del wallet, desde el más reciente. Las nuevas recargas
+              se realizan desde Sala.
             </p>
           </div>
         </div>
