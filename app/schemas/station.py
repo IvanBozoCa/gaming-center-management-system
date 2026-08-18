@@ -22,6 +22,7 @@ AdminStationStatus = Literal[
     "OFFLINE",
 ]
 
+
 class StationCreate(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -31,7 +32,8 @@ class StationCreate(BaseModel):
         min_length=1,
         max_length=50,
     )
-    
+
+
 class StationStatusUpdate(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -48,5 +50,27 @@ class StationResponse(BaseModel):
     id: UUID
     code: str
     status: StationStatus
+    last_seen_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class AgentCredentialResponse(
+    BaseModel
+):
+    station_id: UUID
+    station_code: str
+    agent_token: str
+
+
+class StationAgentResponse(
+    BaseModel
+):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    id: UUID
+    code: str
+    status: StationStatus
+    last_seen_at: datetime | None

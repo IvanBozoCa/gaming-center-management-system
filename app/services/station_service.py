@@ -1,9 +1,18 @@
-from sqlalchemy import select
+from dataclasses import dataclass
+from datetime import datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app.models.station import Station
 from app.models.usage_session import UsageSession
+from app.core.agent_security import (
+    generate_agent_credential,
+    hash_agent_secret,
+    parse_agent_token,
+    verify_agent_secret,
+)
 
 ADMIN_MANAGED_STATION_STATUSES = frozenset(
     {
@@ -148,6 +157,138 @@ def update_station_status(
             return station
 
         station.status = status
+
+        db.commit()
+        db.refresh(station)
+
+        return station
+
+    except Exception:
+        db.rollback()
+        raise
+
+@dataclass(frozen=True)
+class AgentCredentialResult:
+    station_id: UUID
+    station_code: str
+    agent_token: str
+
+
+def rotate_station_agent_credential(
+    db: Session,
+    *,
+    station_id: UUID,
+) -> AgentCredentialResult:
+    try:
+        station = db.scalar(
+            select(Station)
+            .where(
+                Station.id
+                == station_id
+            )
+            .with_for_update()
+        )
+
+        if station is None:
+            raise StationNotFoundError
+
+        (
+            key_id,
+            secret,
+            token,
+        ) = generate_agent_credential()
+
+        station.agent_key_id = (
+            key_id
+        )
+
+        station.agent_secret_hash = (
+            hash_agent_secret(secret)
+        )
+
+        db.commit()
+        db.refresh(station)
+
+        return AgentCredentialResult(
+            station_id=station.id,
+            station_code=station.code,
+            agent_token=token,
+        )
+
+    except Exception:
+        db.rollback()
+        raise
+
+
+def authenticate_station_agent(
+    db: Session,
+    *,
+    token: str,
+) -> Station | None:
+    parsed = parse_agent_token(
+        token
+    )
+
+    if parsed is None:
+        return None
+
+    key_id, secret = parsed
+
+    station = db.scalar(
+        select(Station).where(
+            Station.agent_key_id
+            == key_id
+        )
+    )
+
+    if (
+        station is None
+        or station.agent_secret_hash
+        is None
+    ):
+        return None
+
+    if not verify_agent_secret(
+        secret,
+        station.agent_secret_hash,
+    ):
+        return None
+
+    return station
+
+
+def record_station_heartbeat(
+    db: Session,
+    *,
+    station_id: UUID,
+) -> Station:
+    try:
+        station = db.scalar(
+            select(Station)
+            .where(
+                Station.id
+                == station_id
+            )
+            .with_for_update()
+        )
+
+        if station is None:
+            raise StationNotFoundError
+
+        server_now = db.scalar(
+            select(
+                func.clock_timestamp()
+            )
+        )
+
+        if server_now is None:
+            raise RuntimeError(
+                "Unable to obtain server time"
+            )
+
+        station.last_seen_at = (
+            server_now
+        )
 
         db.commit()
         db.refresh(station)

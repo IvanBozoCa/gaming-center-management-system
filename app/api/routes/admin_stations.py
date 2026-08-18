@@ -15,6 +15,7 @@ from app.schemas.station import (
     StationCreate,
     StationResponse,
     StationStatusUpdate,
+    AgentCredentialResponse,
 )
 from app.services.station_service import (
     InvalidStationCodeError,
@@ -25,6 +26,7 @@ from app.services.station_service import (
     create_station,
     list_stations,
     update_station_status,
+    rotate_station_agent_credential,
 )
 
 router = APIRouter(
@@ -123,4 +125,40 @@ def change_station_status(
             ),
         ) from exc
         
-        
+@router.post(
+    "/{station_id}/agent-credential",
+    response_model=AgentCredentialResponse,
+    status_code=status.HTTP_200_OK,
+)
+def rotate_agent_credential(
+    station_id: UUID,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(
+        require_admin
+    ),
+):
+    try:
+        result = (
+            rotate_station_agent_credential(
+                db,
+                station_id=station_id,
+            )
+        )
+
+        return AgentCredentialResponse(
+            station_id=result.station_id,
+            station_code=(
+                result.station_code
+            ),
+            agent_token=(
+                result.agent_token
+            ),
+        )
+
+    except StationNotFoundError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail="Station not found",
+        ) from exc

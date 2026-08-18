@@ -22,6 +22,9 @@ from app.api.routes.admin_guest_sessions import (
 from app.api.routes.admin_time_products import (
     router as admin_time_products_router,
 )
+from app.api.routes.agent import (
+    router as agent_router,
+)
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -48,6 +51,7 @@ app.include_router(admin_sessions_router)
 app.include_router(admin_guest_sessions_router)
 app.include_router(admin_time_products_router)
 app.include_router(admin_time_sales_router)
+app.include_router(agent_router)
 
 @app.get("/health")
 def health_check():
