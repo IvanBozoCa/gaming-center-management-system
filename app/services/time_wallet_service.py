@@ -53,6 +53,76 @@ class TimePurchaseResult:
     created_at: datetime
 
 
+def apply_time_purchase(
+    db: Session,
+    *,
+    customer_id: UUID,
+    seconds: int,
+    actor_user_id: UUID,
+) -> TimePurchaseResult:
+    """
+    Aplica una compra de tiempo sin hacer commit.
+
+    El caller es responsable de confirmar o revertir
+    la transacción.
+    """
+    if seconds <= 0:
+        raise InvalidTimeAmountError
+
+    customer = db.scalar(
+        select(User)
+        .where(
+            User.id == customer_id
+        )
+        .with_for_update()
+    )
+
+    if (
+        customer is None
+        or customer.role != "CUSTOMER"
+    ):
+        raise CustomerNotFoundError
+
+    if not customer.is_active:
+        raise InactiveCustomerError
+
+    wallet = db.scalar(
+        select(TimeWallet)
+        .where(
+            TimeWallet.user_id == customer.id
+        )
+        .with_for_update()
+    )
+
+    if wallet is None:
+        raise CustomerWalletNotFoundError
+
+    wallet.available_seconds += seconds
+
+    transaction = TimeTransaction(
+        wallet_id=wallet.id,
+        transaction_type="PURCHASE",
+        available_seconds_delta=seconds,
+        reserved_seconds_delta=0,
+        actor_user_id=actor_user_id,
+    )
+
+    db.add(transaction)
+
+    db.flush()
+    db.refresh(transaction)
+
+    return TimePurchaseResult(
+        transaction_id=transaction.id,
+        customer_id=customer.id,
+        credited_seconds=seconds,
+        available_seconds=wallet.available_seconds,
+        reserved_seconds=wallet.reserved_seconds,
+        transaction_type=transaction.transaction_type,
+        created_at=transaction.created_at,
+    )
+
+
 def register_time_purchase(
     db: Session,
     *,
@@ -60,62 +130,12 @@ def register_time_purchase(
     seconds: int,
     actor_user_id: UUID,
 ) -> TimePurchaseResult:
-    if seconds <= 0:
-        raise InvalidTimeAmountError
-
     try:
-        customer = db.scalar(
-            select(User)
-            .where(
-                User.id == customer_id
-            )
-            .with_for_update()
-        )
-
-        if (
-            customer is None
-            or customer.role != "CUSTOMER"
-        ):
-            raise CustomerNotFoundError
-
-        if not customer.is_active:
-            raise InactiveCustomerError
-
-        wallet = db.scalar(
-            select(TimeWallet)
-            .where(
-                TimeWallet.user_id
-                == customer.id
-            )
-            .with_for_update()
-        )
-
-        if wallet is None:
-            raise CustomerWalletNotFoundError
-
-        wallet.available_seconds += seconds
-
-        transaction = TimeTransaction(
-            wallet_id=wallet.id,
-            transaction_type="PURCHASE",
-            available_seconds_delta=seconds,
-            reserved_seconds_delta=0,
+        result = apply_time_purchase(
+            db,
+            customer_id=customer_id,
+            seconds=seconds,
             actor_user_id=actor_user_id,
-        )
-
-        db.add(transaction)
-
-        db.flush()
-        db.refresh(transaction)
-
-        result = TimePurchaseResult(
-            transaction_id=transaction.id,
-            customer_id=customer.id,
-            credited_seconds=seconds,
-            available_seconds=wallet.available_seconds,
-            reserved_seconds=wallet.reserved_seconds,
-            transaction_type=transaction.transaction_type,
-            created_at=transaction.created_at,
         )
 
         db.commit()
@@ -125,7 +145,7 @@ def register_time_purchase(
     except Exception:
         db.rollback()
         raise
-    
+       
 
 def _get_customer_wallet_for_read(
     db: Session,

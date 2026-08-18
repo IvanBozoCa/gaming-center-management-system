@@ -50,6 +50,11 @@ def test_frontend_mvp_openapi_contract():
             "/admin/time-products/{time_product_id}",
             "patch",
         ),
+        # Time sales
+        (
+            "/admin/time-sales",
+            "post",
+        ),
 
         # Registered sessions
         ("/admin/sessions", "post"),

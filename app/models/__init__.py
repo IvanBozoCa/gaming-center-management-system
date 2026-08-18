@@ -6,6 +6,7 @@ from app.models.station import Station
 from app.models.time_wallet import TimeWallet
 from app.models.user import User
 from app.models.time_product import TimeProduct
+from app.models.time_sale import TimeSale
 
 __all__ = [
     "User",
@@ -14,4 +15,5 @@ __all__ = [
     "Station",
     "UsageSession",
     "TimeProduct",
+    "TimeSale",
 ]
