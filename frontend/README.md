@@ -1,34 +1,150 @@
-# React + TypeScript + Vite
+# GCMS Admin Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Administrative frontend for the Gaming Center Management System.
 
-Currently, two official plugins are available:
+Built with React, TypeScript and Vite. It consumes the FastAPI backend and
+provides administrative flows for customers, stations, REGISTERED sessions
+and GUEST sessions.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Requirements
 
-## React Compiler
+- Node.js 22+
+- npm 11+
+- GCMS FastAPI backend running locally
+- PostgreSQL configured for the backend
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+## Environment
 
-Note: This will impact Vite dev & build performances.
+Create the frontend environment file from the example:
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+Copy-Item .env.example .env
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Default local configuration:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+`VITE_API_BASE_URL` is required by the application.
+
+## Install dependencies
+
+From the `frontend` directory:
+
+```powershell
+npm install
+```
+
+## Run in development
+
+First start the FastAPI backend from the repository root:
+
+```powershell
+uvicorn app.main:app --reload
+```
+
+Then, in another terminal:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+The frontend is normally available at:
+
+```text
+http://localhost:5173
+```
+
+The FastAPI backend is normally available at:
+
+```text
+http://127.0.0.1:8000
+```
+
+Swagger:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## Administrative flows
+
+The ADMIN frontend currently supports:
+
+- ADMIN authentication and protected routes
+- customer registration, search and filtering
+- customer detail
+- time wallet inspection
+- time purchases
+- time transaction ledger
+- station registration and status management
+- REGISTERED session start
+- REGISTERED session extension
+- REGISTERED session finish
+- REGISTERED session history
+- GUEST session start
+- GUEST session finish
+- GUEST session history
+
+## Production validation
+
+Run:
+
+```powershell
+npm run build
+npm run lint
+```
+
+Both commands must pass before merging frontend changes.
+
+The Vite production build is generated in:
+
+```text
+frontend/dist/
+```
+
+## Manual QA
+
+The frontend administrative QA record is located at:
+
+```text
+docs/frontend-admin-qa.md
+```
+
+The smoke test covers:
+
+- protected navigation
+- login and logout
+- invalid/expired authentication
+- customer and wallet flows
+- station status changes
+- REGISTERED sessions
+- GUEST sessions
+- CORS integration
+- controlled backend errors
+
+## Local execution summary
+
+Terminal 1:
+
+```powershell
+uvicorn app.main:app --reload
+```
+
+Terminal 2:
+
+```powershell
+cd frontend
+npm install
+Copy-Item .env.example .env
+npm run dev
+```
+
+Then open:
+
+```text
+http://localhost:5173
+```

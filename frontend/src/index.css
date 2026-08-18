@@ -155,7 +155,8 @@ textarea {
   font-weight: 600;
 }
 
-.form-field input {
+.form-field input,
+.form-field select {
   width: 100%;
   padding: 0.8rem 0.9rem;
   border: 1px solid #34415a;
@@ -165,12 +166,19 @@ textarea {
   background: #0b1220;
 }
 
-.form-field input:focus {
+.form-field input:focus,
+.form-field select:focus {
   border-color: #7182a3;
 }
 
-.form-field input:disabled {
+.form-field input:disabled,
+.form-field select:disabled {
   opacity: 0.6;
+}
+
+.form-field select option {
+  color: #e7e9ee;
+  background: #0b1220;
 }
 
 .primary-button {
