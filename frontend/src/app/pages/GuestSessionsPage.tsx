@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   finishGuestSession,
   listActiveGuestSessions,
   listGuestSessionHistory,
-  startGuestSession,
 } from "../../features/guest-sessions/api";
 
 import type {
@@ -14,10 +13,14 @@ import type {
 } from "../../features/guest-sessions/types";
 
 import { listStations } from "../../features/stations/api";
+
 import type { Station } from "../../features/stations/types";
 
 import { ApiError } from "../../lib/http";
+
 import { formatDuration } from "../../lib/time";
+
+const GUEST_HISTORY_PAGE_SIZE = 20;
 
 const timeStateLabels: Record<GuestSessionTimeState, string> = {
   RUNNING: "En curso",
@@ -26,37 +29,6 @@ const timeStateLabels: Record<GuestSessionTimeState, string> = {
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("es-CL");
-}
-
-function getStartErrorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) {
-    return "No fue posible iniciar la sesión de invitado.";
-  }
-
-  if (error.status === 404) {
-    return "La estación seleccionada ya no existe.";
-  }
-
-  if (error.status === 422) {
-    return "El tiempo autorizado debe ser mayor que cero.";
-  }
-
-  if (error.status === 409 && error.message === "Station is not available") {
-    return "La estación seleccionada ya no está disponible.";
-  }
-
-  if (
-    error.status === 409 &&
-    error.message === "Station already has an active session"
-  ) {
-    return "La estación ya tiene una sesión activa.";
-  }
-
-  if (error.status === 409) {
-    return "No fue posible iniciar la sesión por un conflicto de estado.";
-  }
-
-  return "No fue posible iniciar la sesión de invitado.";
 }
 
 function getFinishErrorMessage(error: unknown): string {
@@ -88,27 +60,32 @@ function getFinishErrorMessage(error: unknown): string {
 
   return "No fue posible finalizar la sesión de invitado.";
 }
-const GUEST_HISTORY_PAGE_SIZE = 20;
 
 export function GuestSessionsPage() {
-  const [sessions, setSessions] = useState<ActiveGuestSession[]>([]);
-  const [stations, setStations] = useState<Station[]>([]);
+  /*
+   * Sesiones activas
+   */
 
-  const [selectedStationId, setSelectedStationId] = useState("");
-  const [authorizedMinutes, setAuthorizedMinutes] = useState("");
+  const [sessions, setSessions] = useState<ActiveGuestSession[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingStations, setIsLoadingStations] = useState(true);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
-  const [stationError, setStationError] = useState<string | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
+
   const [feedback, setFeedback] = useState<string | null>(null);
+
   const [finishingSessionId, setFinishingSessionId] = useState<string | null>(
     null,
   );
+
+  const [finishError, setFinishError] = useState<string | null>(null);
+
+  /*
+   * Historial
+   */
+
   const [history, setHistory] = useState<FinishedGuestSession[]>([]);
 
   const [historyStations, setHistoryStations] = useState<Station[]>([]);
@@ -123,7 +100,9 @@ export function GuestSessionsPage() {
 
   const [historyError, setHistoryError] = useState<string | null>(null);
 
-  const [finishError, setFinishError] = useState<string | null>(null);
+  /*
+   * Sesiones activas
+   */
 
   const loadSessions = useCallback(
     async (showFullLoading = true): Promise<boolean> => {
@@ -151,24 +130,10 @@ export function GuestSessionsPage() {
     },
     [],
   );
-  const loadAvailableStations = useCallback(async (): Promise<boolean> => {
-    setIsLoadingStations(true);
-    setStationError(null);
 
-    try {
-      const data = await listStations();
-
-      setStations(data.filter((station) => station.status === "AVAILABLE"));
-
-      return true;
-    } catch {
-      setStationError("No fue posible cargar las estaciones disponibles.");
-
-      return false;
-    } finally {
-      setIsLoadingStations(false);
-    }
-  }, []);
+  /*
+   * Estaciones para filtros de historial
+   */
 
   const loadHistoryStations = useCallback(async (): Promise<boolean> => {
     try {
@@ -182,15 +147,22 @@ export function GuestSessionsPage() {
     }
   }, []);
 
+  /*
+   * Historial GUEST
+   */
+
   const loadHistory = useCallback(
     async (offset: number, stationId: string): Promise<boolean> => {
       setIsHistoryLoading(true);
+
       setHistoryError(null);
 
       try {
         const data = await listGuestSessionHistory({
           stationId: stationId || undefined,
+
           limit: GUEST_HISTORY_PAGE_SIZE + 1,
+
           offset,
         });
 
@@ -209,6 +181,15 @@ export function GuestSessionsPage() {
     },
     [],
   );
+
+  /*
+   * Carga inicial
+   */
+
+  useEffect(() => {
+    void loadSessions();
+  }, [loadSessions]);
+
   useEffect(() => {
     void loadHistoryStations();
   }, [loadHistoryStations]);
@@ -217,80 +198,28 @@ export function GuestSessionsPage() {
     void loadHistory(historyOffset, historyStationId);
   }, [loadHistory, historyOffset, historyStationId]);
 
-  useEffect(() => {
-    void loadSessions();
-  }, [loadSessions]);
+  /*
+   * Actualizar sesiones activas
+   */
 
-  useEffect(() => {
-    void loadAvailableStations();
-  }, [loadAvailableStations]);
   async function handleRefresh() {
     setIsRefreshing(true);
+
     setFeedback(null);
 
-    const [sessionsUpdated, stationsUpdated] = await Promise.all([
-      loadSessions(false),
-      loadAvailableStations(),
-    ]);
+    const success = await loadSessions(false);
 
-    if (sessionsUpdated && stationsUpdated) {
-      setFeedback("Sesiones y estaciones actualizadas.");
+    if (success) {
+      setFeedback("Sesiones GUEST actualizadas.");
     }
 
     setIsRefreshing(false);
   }
-  async function handleStartSession(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
 
-    const minutes = Number(authorizedMinutes);
+  /*
+   * Finalizar sesión GUEST
+   */
 
-    if (!selectedStationId) {
-      setStartError("Selecciona una estación.");
-      return;
-    }
-
-    if (!Number.isFinite(minutes) || minutes <= 0) {
-      setStartError("El tiempo autorizado debe ser mayor que cero.");
-      return;
-    }
-
-    const authorizedSeconds = Math.floor(minutes * 60);
-
-    setIsStarting(true);
-    setStartError(null);
-    setFeedback(null);
-
-    try {
-      const startedSession = await startGuestSession({
-        station_id: selectedStationId,
-        authorized_seconds: authorizedSeconds,
-      });
-
-      setSelectedStationId("");
-      setAuthorizedMinutes("");
-
-      const [sessionsUpdated, stationsUpdated] = await Promise.all([
-        loadSessions(false),
-        loadAvailableStations(),
-      ]);
-
-      if (!sessionsUpdated || !stationsUpdated) {
-        setFeedback(
-          "La sesión fue iniciada, pero no fue posible actualizar toda la pantalla.",
-        );
-      } else {
-        setFeedback(
-          `Sesión GUEST iniciada por ${formatDuration(
-            startedSession.authorized_seconds,
-          )}.`,
-        );
-      }
-    } catch (error) {
-      setStartError(getStartErrorMessage(error));
-    } finally {
-      setIsStarting(false);
-    }
-  }
   async function handleFinishSession(session: ActiveGuestSession) {
     const confirmed = window.confirm(
       `¿Finalizar la sesión de invitado en ${session.station_code}?`,
@@ -301,7 +230,9 @@ export function GuestSessionsPage() {
     }
 
     setFinishingSessionId(session.session_id);
+
     setFinishError(null);
+
     setFeedback(null);
 
     try {
@@ -313,14 +244,11 @@ export function GuestSessionsPage() {
         ),
       );
 
-      const [stationsUpdated, historyUpdated] = await Promise.all([
-        loadAvailableStations(),
-        loadHistory(historyOffset, historyStationId),
-      ]);
+      const historyUpdated = await loadHistory(historyOffset, historyStationId);
 
-      if (!stationsUpdated || !historyUpdated) {
+      if (!historyUpdated) {
         setFeedback(
-          "La sesión fue finalizada, pero no fue posible actualizar toda la pantalla.",
+          "La sesión fue finalizada, pero no fue posible actualizar el historial.",
         );
       } else {
         setFeedback(
@@ -331,12 +259,13 @@ export function GuestSessionsPage() {
           )} no utilizados.`,
         );
       }
-    } catch (error) {
-      setFinishError(getFinishErrorMessage(error));
+    } catch (finishSessionError) {
+      setFinishError(getFinishErrorMessage(finishSessionError));
     } finally {
       setFinishingSessionId(null);
     }
   }
+
   return (
     <section className="sessions-page">
       <header className="page-header">
@@ -346,79 +275,14 @@ export function GuestSessionsPage() {
           <h1>Sesiones de invitados</h1>
 
           <p className="page-description">
-            Inicia y supervisa sesiones temporales para usuarios sin cuenta.
+            Supervisa las sesiones temporales de usuarios sin cuenta. Las nuevas
+            ventas GUEST se realizan desde Sala seleccionando una estación
+            disponible y una tarifa activa.
           </p>
         </div>
       </header>
 
-      <section className="session-start-section">
-        <div className="section-header">
-          <div>
-            <h2>Nueva sesión GUEST</h2>
-
-            <p className="page-description">
-              Selecciona una estación disponible y asigna tiempo de uso.
-            </p>
-          </div>
-        </div>
-
-        {stationError && (
-          <p className="form-error" role="alert">
-            {stationError}
-          </p>
-        )}
-
-        <form
-          className="session-start-form guest-session-start-form"
-          onSubmit={handleStartSession}
-        >
-          <label className="form-field">
-            <span>Estación</span>
-
-            <select
-              value={selectedStationId}
-              onChange={(event) => setSelectedStationId(event.target.value)}
-              disabled={isLoadingStations || isStarting}
-            >
-              <option value="">Selecciona una estación</option>
-
-              {stations.map((station) => (
-                <option key={station.id} value={station.id}>
-                  {station.code}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="form-field">
-            <span>Minutos</span>
-
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={authorizedMinutes}
-              onChange={(event) => setAuthorizedMinutes(event.target.value)}
-              placeholder="Ej: 60"
-              disabled={isStarting}
-            />
-          </label>
-
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={isStarting || isLoadingStations || stations.length === 0}
-          >
-            {isStarting ? "Iniciando..." : "Iniciar invitado"}
-          </button>
-        </form>
-
-        {startError && (
-          <p className="form-error" role="alert">
-            {startError}
-          </p>
-        )}
-      </section>
+      {/* SESIONES GUEST ACTIVAS */}
 
       <section className="active-sessions-section">
         <div className="section-header">
@@ -463,66 +327,84 @@ export function GuestSessionsPage() {
         ) : sessions.length === 0 ? (
           <div className="content-state">No hay sesiones GUEST activas.</div>
         ) : (
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Estación</th>
-                  <th>Estado</th>
-                  <th>Autorizado</th>
-                  <th>Transcurrido</th>
-                  <th>Restante</th>
-                  <th>Inicio</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
+          <>
+            <p className="results-count">Sesiones activas: {sessions.length}</p>
 
-              <tbody>
-                {sessions.map((session) => (
-                  <tr key={session.session_id}>
-                    <td>
-                      <strong>{session.station_code}</strong>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Estación</th>
 
-                      <div className="table-secondary-text">Invitado</div>
-                    </td>
+                    <th>Estado</th>
 
-                    <td>
-                      <span
-                        className={
-                          "session-time-state " +
-                          session.time_state.toLowerCase()
-                        }
-                      >
-                        {timeStateLabels[session.time_state]}
-                      </span>
-                    </td>
+                    <th>Autorizado</th>
 
-                    <td>{formatDuration(session.authorized_seconds)}</td>
+                    <th>Transcurrido</th>
 
-                    <td>{formatDuration(session.elapsed_seconds)}</td>
+                    <th>Restante</th>
 
-                    <td>{formatDuration(session.remaining_seconds)}</td>
+                    <th>Inicio</th>
 
-                    <td>{formatDateTime(session.started_at)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="danger-button"
-                        disabled={finishingSessionId === session.session_id}
-                        onClick={() => void handleFinishSession(session)}
-                      >
-                        {finishingSessionId === session.session_id
-                          ? "Finalizando..."
-                          : "Finalizar"}
-                      </button>
-                    </td>
+                    <th>Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+
+                <tbody>
+                  {sessions.map((session) => (
+                    <tr key={session.session_id}>
+                      <td>
+                        <strong>{session.station_code}</strong>
+
+                        <div className="table-secondary-text">Invitado</div>
+                      </td>
+
+                      <td>
+                        <span
+                          className={
+                            "session-time-state " +
+                            session.time_state.toLowerCase()
+                          }
+                        >
+                          {timeStateLabels[session.time_state]}
+                        </span>
+                      </td>
+
+                      <td>{formatDuration(session.authorized_seconds)}</td>
+
+                      <td>{formatDuration(session.elapsed_seconds)}</td>
+
+                      <td>
+                        <strong>
+                          {formatDuration(session.remaining_seconds)}
+                        </strong>
+                      </td>
+
+                      <td>{formatDateTime(session.started_at)}</td>
+
+                      <td>
+                        <button
+                          type="button"
+                          className="danger-button"
+                          disabled={finishingSessionId === session.session_id}
+                          onClick={() => void handleFinishSession(session)}
+                        >
+                          {finishingSessionId === session.session_id
+                            ? "Finalizando..."
+                            : "Finalizar"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
+
+      {/* HISTORIAL GUEST */}
+
       <section className="session-history-section">
         <div className="section-header">
           <div>
@@ -542,6 +424,7 @@ export function GuestSessionsPage() {
               value={historyStationId}
               onChange={(event) => {
                 setHistoryStationId(event.target.value);
+
                 setHistoryOffset(0);
               }}
             >
@@ -566,7 +449,7 @@ export function GuestSessionsPage() {
           <div className="content-state">Cargando historial...</div>
         ) : history.length === 0 ? (
           <div className="content-state">
-            No hay sesiones GUEST finalizadas para este filtro.
+            No hay sesiones GUEST finalizadas para estos filtros.
           </div>
         ) : (
           <>
@@ -575,10 +458,15 @@ export function GuestSessionsPage() {
                 <thead>
                   <tr>
                     <th>Estación</th>
+
                     <th>Autorizado</th>
+
                     <th>Consumido</th>
+
                     <th>No utilizado</th>
+
                     <th>Inicio</th>
+
                     <th>Fin</th>
                   </tr>
                 </thead>
@@ -611,7 +499,7 @@ export function GuestSessionsPage() {
               <button
                 type="button"
                 className="secondary-button"
-                disabled={historyOffset === 0 || isHistoryLoading}
+                disabled={historyOffset === 0}
                 onClick={() =>
                   setHistoryOffset((current) =>
                     Math.max(0, current - GUEST_HISTORY_PAGE_SIZE),
@@ -628,7 +516,7 @@ export function GuestSessionsPage() {
               <button
                 type="button"
                 className="secondary-button"
-                disabled={!historyHasNext || isHistoryLoading}
+                disabled={!historyHasNext}
                 onClick={() =>
                   setHistoryOffset(
                     (current) => current + GUEST_HISTORY_PAGE_SIZE,
