@@ -1196,3 +1196,207 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==================================================
+   Room registered sale
+   ================================================== */
+
+.room-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.room-header-actions .primary-button,
+.room-header-actions .secondary-button {
+  margin-top: 0;
+}
+
+.room-registered-sale-panel {
+  margin-bottom: 2rem;
+  padding: 1.4rem;
+
+  border: 1px solid #35558a;
+  border-radius: 14px;
+
+  background: #111a2b;
+}
+
+.room-registered-sale-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+
+  margin-bottom: 1.25rem;
+}
+
+.room-registered-sale-header h2 {
+  margin: 0.45rem 0 0.35rem;
+  font-size: 1.35rem;
+}
+
+.room-customer-search {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+
+  max-width: 720px;
+  margin-top: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.room-customer-search .primary-button {
+  margin-top: 0;
+}
+
+.room-customer-results {
+  display: grid;
+  gap: 0.65rem;
+
+  margin-top: 1rem;
+}
+
+.room-customer-option {
+  width: 100%;
+  padding: 0.9rem 1rem;
+
+  border: 1px solid #34415a;
+  border-radius: 10px;
+
+  color: #e7e9ee;
+  background: #0b1220;
+
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+
+  text-align: left;
+
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.room-customer-option:hover {
+  border-color: #5b6f95;
+  background: #141f33;
+}
+
+.room-customer-option.selected {
+  border-color: #7c98c9;
+  background: #172b4d;
+  box-shadow: 0 0 0 1px #35558a;
+}
+
+.room-customer-option > div:first-child {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.room-customer-option > div:first-child strong {
+  color: #ffffff;
+}
+
+.room-customer-option > div:first-child span {
+  color: #9da9bc;
+  font-size: 0.85rem;
+}
+
+.room-customer-balance {
+  display: grid;
+  gap: 0.2rem;
+
+  text-align: right;
+}
+
+.room-customer-balance span {
+  color: #9da9bc;
+  font-size: 0.75rem;
+}
+
+.room-customer-balance strong {
+  color: #ffffff;
+}
+
+.room-selected-customer {
+  margin-top: 1.25rem;
+  padding: 1rem;
+
+  border: 1px solid #35558a;
+  border-radius: 10px;
+
+  background: #172238;
+
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2rem;
+}
+
+.room-selected-customer > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.room-selected-customer > div:last-child {
+  text-align: right;
+}
+
+.room-selected-customer strong {
+  color: #ffffff;
+  font-size: 1.05rem;
+}
+
+.room-selected-customer .summary-label {
+  color: #9da9bc;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+@media (max-width: 700px) {
+  .room-header-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .room-header-actions button {
+    width: 100%;
+  }
+
+  .room-registered-sale-header {
+    flex-direction: column;
+  }
+
+  .room-registered-sale-header .secondary-button {
+    width: 100%;
+  }
+
+  .room-customer-search {
+    grid-template-columns: 1fr;
+  }
+
+  .room-customer-option {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .room-customer-balance {
+    text-align: left;
+  }
+
+  .room-selected-customer {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .room-selected-customer > div:last-child {
+    text-align: left;
+  }
+}
