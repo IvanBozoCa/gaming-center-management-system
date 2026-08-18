@@ -10,10 +10,23 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.core.security import decode_access_token
 from app.models.user import User
+from fastapi.security import (
+    HTTPAuthorizationCredentials,
+    HTTPBearer,
+    OAuth2PasswordBearer,
+)
+from app.models.station import Station
 
+from app.services.station_service import (
+    authenticate_station_agent,
+)
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="auth/login"
+)
+station_agent_scheme = HTTPBearer(
+    scheme_name="StationAgentBearer",
+    auto_error=False,
 )
 
 
@@ -79,3 +92,49 @@ def require_admin(
         )
 
     return current_user
+
+def get_current_station_agent(
+    credentials: (
+        HTTPAuthorizationCredentials
+        | None
+    ) = Depends(
+        station_agent_scheme
+    ),
+    db: Session = Depends(get_db),
+) -> Station:
+    credentials_exception = (
+        HTTPException(
+            status_code=(
+                status.HTTP_401_UNAUTHORIZED
+            ),
+            detail=(
+                "Could not validate "
+                "station agent credentials"
+            ),
+            headers={
+                "WWW-Authenticate":
+                    "Bearer",
+            },
+        )
+    )
+
+    if (
+        credentials is None
+        or credentials.scheme.lower()
+        != "bearer"
+    ):
+        raise credentials_exception
+
+    station = (
+        authenticate_station_agent(
+            db,
+            token=(
+                credentials.credentials
+            ),
+        )
+    )
+
+    if station is None:
+        raise credentials_exception
+
+    return station
