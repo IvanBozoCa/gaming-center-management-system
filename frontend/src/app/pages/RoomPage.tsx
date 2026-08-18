@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { listStations } from "../../features/stations/api";
 import type { Station, StationStatus } from "../../features/stations/types";
@@ -14,7 +14,15 @@ import { ApiError } from "../../lib/http";
 import { listActiveTimeProducts } from "../../features/time-products/api";
 import type { TimeProduct } from "../../features/time-products/types";
 
-import { createGuestTimeSale } from "../../features/time-sales/api";
+import {
+  createGuestTimeSale,
+  createRegisteredTimeSale,
+} from "../../features/time-sales/api";
+
+import { listCustomers } from "../../features/customers/api";
+import type { CustomerSummary } from "../../features/customers/types";
+
+import { formatDuration } from "../../lib/time";
 
 type RoomSession =
   | {
@@ -72,6 +80,32 @@ function getGuestSaleErrorMessage(error: unknown): string {
 
     default:
       return "No fue posible registrar la venta de invitado.";
+  }
+}
+
+function getRegisteredSaleErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return "No fue posible acreditar el tiempo al cliente.";
+  }
+
+  switch (error.message) {
+    case "Time product is inactive":
+      return "La tarifa seleccionada ya no está activa.";
+
+    case "Time product not found":
+      return "La tarifa seleccionada ya no existe.";
+
+    case "Customer not found":
+      return "El cliente seleccionado ya no existe.";
+
+    case "Customer is inactive":
+      return "No se puede recargar saldo a un cliente inactivo.";
+
+    case "Customer wallet not found":
+      return "El cliente no tiene un wallet disponible.";
+
+    default:
+      return "No fue posible registrar la venta del cliente.";
   }
 }
 
@@ -179,6 +213,30 @@ export function RoomPage() {
   const [isCreatingGuestSale, setIsCreatingGuestSale] = useState(false);
 
   const [guestSaleError, setGuestSaleError] = useState<string | null>(null);
+  const [isRegisteredSaleOpen, setIsRegisteredSaleOpen] = useState(false);
+
+  const [customerQuery, setCustomerQuery] = useState("");
+
+  const [customerResults, setCustomerResults] = useState<CustomerSummary[]>([]);
+
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<CustomerSummary | null>(null);
+
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
+
+  const [customerSearchError, setCustomerSearchError] = useState<string | null>(
+    null,
+  );
+  const [isCreatingRegisteredSale, setIsCreatingRegisteredSale] =
+    useState(false);
+
+  const [registeredSaleError, setRegisteredSaleError] = useState<string | null>(
+    null,
+  );
+
+  const [registeredSaleSuccess, setRegisteredSaleSuccess] = useState<
+    string | null
+  >(null);
 
   const loadRoom = useCallback(
     async (showFullLoading = true): Promise<boolean> => {
@@ -227,6 +285,16 @@ export function RoomPage() {
     setIsRefreshing(false);
   }
   async function handleOpenGuestSale(station: Station) {
+    if (isCreatingRegisteredSale) {
+      return;
+    }
+
+    setIsRegisteredSaleOpen(false);
+    setCustomerQuery("");
+    setCustomerResults([]);
+    setSelectedCustomer(null);
+    setCustomerSearchError(null);
+
     setSelectedGuestStation(station);
     setTimeProducts([]);
     setSelectedTimeProductId(null);
@@ -243,7 +311,6 @@ export function RoomPage() {
       setIsLoadingTimeProducts(false);
     }
   }
-
   function handleCloseGuestSale() {
     if (isCreatingGuestSale) {
       return;
@@ -253,6 +320,144 @@ export function RoomPage() {
     setTimeProducts([]);
     setSelectedTimeProductId(null);
     setGuestSaleError(null);
+  }
+
+  async function handleOpenRegisteredSale() {
+    if (isCreatingGuestSale) {
+      return;
+    }
+
+    setSelectedGuestStation(null);
+    setGuestSaleError(null);
+
+    setIsRegisteredSaleOpen(true);
+    setCustomerQuery("");
+    setCustomerResults([]);
+    setSelectedCustomer(null);
+    setCustomerSearchError(null);
+
+    setTimeProducts([]);
+    setSelectedTimeProductId(null);
+
+    setRegisteredSaleError(null);
+    setRegisteredSaleSuccess(null);
+
+    setIsLoadingTimeProducts(true);
+
+    try {
+      const products = await listActiveTimeProducts();
+
+      setTimeProducts(products);
+    } catch {
+      setRegisteredSaleError("No fue posible cargar las tarifas activas.");
+    } finally {
+      setIsLoadingTimeProducts(false);
+    }
+  }
+
+  function handleCloseRegisteredSale() {
+    if (isCreatingRegisteredSale) {
+      return;
+    }
+
+    setIsRegisteredSaleOpen(false);
+
+    setCustomerQuery("");
+    setCustomerResults([]);
+    setSelectedCustomer(null);
+    setCustomerSearchError(null);
+
+    setTimeProducts([]);
+    setSelectedTimeProductId(null);
+
+    setRegisteredSaleError(null);
+    setRegisteredSaleSuccess(null);
+  }
+
+  async function handleSearchCustomers(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const query = customerQuery.trim();
+
+    if (query.length === 0) {
+      setCustomerSearchError("Ingresa un nombre o usuario para buscar.");
+      return;
+    }
+
+    setIsSearchingCustomers(true);
+    setCustomerSearchError(null);
+    setSelectedCustomer(null);
+    setSelectedTimeProductId(null);
+    setRegisteredSaleError(null);
+    setRegisteredSaleSuccess(null);
+
+    try {
+      const customers = await listCustomers({
+        q: query,
+        isActive: true,
+        limit: 10,
+        offset: 0,
+      });
+
+      setCustomerResults(customers);
+    } catch {
+      setCustomerSearchError("No fue posible buscar clientes.");
+    } finally {
+      setIsSearchingCustomers(false);
+    }
+  }
+
+  function handleSelectCustomer(customer: CustomerSummary) {
+    setSelectedCustomer(customer);
+    setSelectedTimeProductId(null);
+
+    setCustomerSearchError(null);
+    setRegisteredSaleError(null);
+    setRegisteredSaleSuccess(null);
+  }
+
+  async function handleCreateRegisteredSale() {
+    if (selectedCustomer === null || selectedTimeProductId === null) {
+      return;
+    }
+
+    setIsCreatingRegisteredSale(true);
+    setRegisteredSaleError(null);
+    setRegisteredSaleSuccess(null);
+
+    try {
+      const response = await createRegisteredTimeSale({
+        sale_type: "REGISTERED",
+        time_product_id: selectedTimeProductId,
+        customer_id: selectedCustomer.id,
+      });
+
+      const updatedCustomer: CustomerSummary = {
+        ...selectedCustomer,
+        available_seconds: response.available_seconds,
+        reserved_seconds: response.reserved_seconds,
+      };
+
+      setSelectedCustomer(updatedCustomer);
+
+      setCustomerResults((currentCustomers) =>
+        currentCustomers.map((customer) =>
+          customer.id === updatedCustomer.id ? updatedCustomer : customer,
+        ),
+      );
+
+      setSelectedTimeProductId(null);
+
+      setRegisteredSaleSuccess(
+        `${response.product_name} acreditado correctamente. Nuevo saldo: ${formatDuration(
+          response.available_seconds,
+        )}.`,
+      );
+    } catch (saleError) {
+      setRegisteredSaleError(getRegisteredSaleErrorMessage(saleError));
+    } finally {
+      setIsCreatingRegisteredSale(false);
+    }
   }
 
   async function handleCreateGuestSale() {
@@ -308,14 +513,25 @@ export function RoomPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => void handleRefresh()}
-          disabled={isRefreshing}
-        >
-          {isRefreshing ? "Actualizando..." : "Actualizar"}
-        </button>
+        <div className="room-header-actions">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => void handleOpenRegisteredSale()}
+            disabled={isCreatingGuestSale || isCreatingRegisteredSale}
+          >
+            Recargar cliente
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? "Actualizando..." : "Actualizar"}
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -353,6 +569,191 @@ export function RoomPage() {
               <span>Fuera de línea</span>
             </article>
           </section>
+          {isRegisteredSaleOpen && (
+            <section className="room-registered-sale-panel">
+              <header className="room-registered-sale-header">
+                <div>
+                  <p className="eyebrow">Venta REGISTERED</p>
+
+                  <h2>Recargar cliente</h2>
+
+                  <p className="page-description">
+                    Busca la cuenta del cliente que comprará tiempo.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleCloseRegisteredSale}
+                  disabled={isSearchingCustomers || isCreatingRegisteredSale}
+                >
+                  Cancelar
+                </button>
+              </header>
+
+              <form
+                className="room-customer-search"
+                onSubmit={(event) => void handleSearchCustomers(event)}
+              >
+                <input
+                  type="search"
+                  value={customerQuery}
+                  onChange={(event) => setCustomerQuery(event.target.value)}
+                  placeholder="Buscar por nombre o usuario"
+                  autoComplete="off"
+                  disabled={isSearchingCustomers}
+                />
+
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={isSearchingCustomers}
+                >
+                  {isSearchingCustomers ? "Buscando..." : "Buscar"}
+                </button>
+              </form>
+
+              {customerSearchError && (
+                <p className="form-error" role="alert">
+                  {customerSearchError}
+                </p>
+              )}
+
+              {!isSearchingCustomers && customerResults.length > 0 && (
+                <div className="room-customer-results">
+                  {customerResults.map((customer) => {
+                    const isSelected = selectedCustomer?.id === customer.id;
+
+                    return (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        className={`room-customer-option ${
+                          isSelected ? "selected" : ""
+                        }`}
+                        aria-pressed={isSelected}
+                        onClick={() => handleSelectCustomer(customer)}
+                      >
+                        <div>
+                          <strong>{customer.display_name}</strong>
+
+                          <span>@{customer.username}</span>
+                        </div>
+
+                        <div className="room-customer-balance">
+                          <span>Saldo disponible</span>
+
+                          <strong>
+                            {formatDuration(customer.available_seconds)}
+                          </strong>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!isSearchingCustomers &&
+                customerQuery.trim().length > 0 &&
+                customerResults.length === 0 &&
+                customerSearchError === null && (
+                  <div className="content-state">
+                    No se encontraron clientes activos.
+                  </div>
+                )}
+
+              {selectedCustomer && (
+                <section className="room-selected-customer">
+                  <div>
+                    <span className="summary-label">Cliente seleccionado</span>
+
+                    <strong>{selectedCustomer.display_name}</strong>
+
+                    <span>@{selectedCustomer.username}</span>
+                  </div>
+
+                  <div>
+                    <span className="summary-label">Saldo actual</span>
+
+                    <strong>
+                      {formatDuration(selectedCustomer.available_seconds)}
+                    </strong>
+                  </div>
+                </section>
+              )}
+              {registeredSaleError && (
+                <p className="form-error" role="alert">
+                  {registeredSaleError}
+                </p>
+              )}
+
+              {registeredSaleSuccess && (
+                <p className="form-success" role="status">
+                  {registeredSaleSuccess}
+                </p>
+              )}
+
+              {isLoadingTimeProducts ? (
+                <div className="content-state">Cargando tarifas...</div>
+              ) : timeProducts.length === 0 ? (
+                <div className="content-state">
+                  No hay tarifas activas disponibles.
+                </div>
+              ) : (
+                <>
+                  <div className="room-product-grid">
+                    {timeProducts.map((product) => {
+                      const isSelected = selectedTimeProductId === product.id;
+
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          className={`room-product-option ${
+                            isSelected ? "selected" : ""
+                          }`}
+                          aria-pressed={isSelected}
+                          disabled={isCreatingRegisteredSale}
+                          onClick={() => {
+                            setSelectedTimeProductId(product.id);
+                            setRegisteredSaleError(null);
+                            setRegisteredSaleSuccess(null);
+                          }}
+                        >
+                          <strong>{product.name}</strong>
+
+                          <span>
+                            {formatRemainingTime(product.duration_seconds)}
+                          </span>
+
+                          <span className="room-product-price">
+                            {formatPriceClp(product.price_clp)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="room-guest-sale-actions">
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => void handleCreateRegisteredSale()}
+                      disabled={
+                        selectedTimeProductId === null ||
+                        isCreatingRegisteredSale
+                      }
+                    >
+                      {isCreatingRegisteredSale
+                        ? "Acreditando..."
+                        : "Cobrar y acreditar"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
           {selectedGuestStation && (
             <section className="room-guest-sale-panel">
               <header className="room-guest-sale-header">
@@ -469,6 +870,7 @@ export function RoomPage() {
                         type="button"
                         className="room-guest-start-button"
                         onClick={() => void handleOpenGuestSale(station)}
+                        disabled={isCreatingRegisteredSale}
                       >
                         Iniciar invitado
                       </button>
