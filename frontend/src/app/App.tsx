@@ -7,6 +7,7 @@ import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { StationsPage } from "./pages/StationsPage";
 import { SessionsPage } from "./pages/SessionsPage";
 import { GuestSessionsPage } from "./pages/GuestSessionsPage";
+import { CustomerDetailPage } from "./pages/CustomerDetailPage";
 
 export function App() {
   return (
@@ -16,6 +17,8 @@ export function App() {
       <Route element={<RequireAdmin />}>
         <Route element={<AdminLayout />}>
           <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/customers/:customerId" element={<CustomerDetailPage />}
+          />
 
           <Route path="/stations" element={<StationsPage />} />
 
