@@ -26,3 +26,12 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# .NET
+**/bin/
+**/obj/
+**/publish/
+.vs/
+*.user
+*.suo
+artifacts/
