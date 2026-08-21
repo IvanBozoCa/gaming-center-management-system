@@ -64,7 +64,7 @@ builder.Services
             options.IdleLogIntervalSeconds >= 10,
         "StationAgent:IdleLogIntervalSeconds must be at least 10 seconds."
     )
-        .Validate(
+    .Validate(
         options =>
             options.ReconnectInitialDelaySeconds
                 >= 1,

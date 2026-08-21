@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Security.Principal;
 
 using Microsoft.Extensions.Options;
 
@@ -29,6 +30,21 @@ public sealed class StationEnrollmentCommand(
         Console.WriteLine(
             "Gaming Center Station Agent enrollment"
         );
+        if (!IsRunningAsAdministrator())
+        {
+            Console.Error.WriteLine(
+                "Enrollment requires Administrator "
+                + "privileges."
+            );
+
+            Console.Error.WriteLine(
+                "Reopen PowerShell using "
+                + "'Run as administrator' "
+                + "and try again."
+            );
+
+            return 1;
+        }
 
         Console.Write(
             "Agent token (input is hidden): "
@@ -156,6 +172,19 @@ public sealed class StationEnrollmentCommand(
 
             return 1;
         }
+    }
+    private static bool
+    IsRunningAsAdministrator()
+    {
+        using WindowsIdentity identity =
+            WindowsIdentity.GetCurrent();
+
+        WindowsPrincipal principal =
+            new(identity);
+
+        return principal.IsInRole(
+            WindowsBuiltInRole.Administrator
+        );
     }
 
     private static string ReadHiddenLine()

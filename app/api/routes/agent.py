@@ -133,11 +133,11 @@ async def station_websocket(
     await websocket.accept()
 
     connection, _ = (
-    station_presence_registry.register(
-        station.id,
-        websocket,
+        station_presence_registry.register(
+            station.id,
+            websocket,
+        )
     )
-)
 
     await send_agent_message(
         websocket,
@@ -236,7 +236,6 @@ async def station_websocket(
                 )
                 continue
             
-
             heartbeat_at = (
                 station_presence_registry
                 .record_heartbeat(
