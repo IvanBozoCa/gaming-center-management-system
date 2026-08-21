@@ -67,6 +67,12 @@ public sealed class StationRealtimeClient(
                     credential.StationCode
                 );
             }
+            finally
+            {
+                _runtimeState.SetBackendConnected(
+                    false
+                );
+            }
 
             if (
                 stoppingToken
@@ -93,12 +99,10 @@ public sealed class StationRealtimeClient(
 
             try
             {
-                await RunSessionAsync(
-                    credential,
+                await Task.Delay(
+                    delay,
                     stoppingToken
                 );
-
-                failureCount = 0;
             }
             catch (OperationCanceledException)
                 when (
@@ -108,25 +112,8 @@ public sealed class StationRealtimeClient(
             {
                 break;
             }
-            catch (Exception exception)
-            {
-                _logger.LogWarning(
-                    exception,
-                    "Realtime connection failed. "
-                    + "StationCode={StationCode}",
-                    credential.StationCode
-                );
-            }
-            finally
-            {
-                _runtimeState.SetBackendConnected(
-                    false
-                );
-
-            }
         }
     }
-
 
     private async Task RunSessionAsync(
         StationCredential credential,
@@ -176,6 +163,9 @@ public sealed class StationRealtimeClient(
             + "HeartbeatInterval={HeartbeatInterval}s",
             credential.StationCode,
             connected.HeartbeatIntervalSeconds
+        );
+        _runtimeState.SetBackendConnected(
+            true
         );
 
         using CancellationTokenSource
