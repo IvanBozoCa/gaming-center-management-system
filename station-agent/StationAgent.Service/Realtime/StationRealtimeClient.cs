@@ -6,12 +6,14 @@ using Microsoft.Extensions.Options;
 
 using StationAgent.Service.Configuration;
 using StationAgent.Service.Security;
+using StationAgent.Service.State;
 
 namespace StationAgent.Service.Realtime;
 
 public sealed class StationRealtimeClient(
     ILogger<StationRealtimeClient> logger,
-    IOptions<StationAgentOptions> options
+    IOptions<StationAgentOptions> options,
+    StationRuntimeState runtimeState
 )
 {
     private const int MaxServerMessageBytes =
@@ -24,6 +26,8 @@ public sealed class StationRealtimeClient(
     private readonly StationAgentOptions
         _options = options.Value;
 
+    private readonly StationRuntimeState
+        _runtimeState = runtimeState;
 
     public async Task RunAsync(
         StationCredential credential,
@@ -89,10 +93,12 @@ public sealed class StationRealtimeClient(
 
             try
             {
-                await Task.Delay(
-                    delay,
+                await RunSessionAsync(
+                    credential,
                     stoppingToken
                 );
+
+                failureCount = 0;
             }
             catch (OperationCanceledException)
                 when (
@@ -101,6 +107,22 @@ public sealed class StationRealtimeClient(
                 )
             {
                 break;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Realtime connection failed. "
+                    + "StationCode={StationCode}",
+                    credential.StationCode
+                );
+            }
+            finally
+            {
+                _runtimeState.SetBackendConnected(
+                    false
+                );
+
             }
         }
     }
