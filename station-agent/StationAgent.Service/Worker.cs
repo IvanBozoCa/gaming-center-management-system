@@ -3,12 +3,14 @@ using System.Diagnostics;
 using Microsoft.Extensions.Options;
 
 using StationAgent.Service.Configuration;
+using StationAgent.Service.Security;
 
 namespace StationAgent.Service;
 
 public sealed class Worker(
     ILogger<Worker> logger,
-    IOptions<StationAgentOptions> options
+    IOptions<StationAgentOptions> options,
+    StationCredentialStore credentialStore
 ) : BackgroundService
 {
     private readonly ILogger<Worker> _logger =
@@ -16,6 +18,9 @@ public sealed class Worker(
 
     private readonly StationAgentOptions _options =
         options.Value;
+
+    private readonly StationCredentialStore
+        _credentialStore = credentialStore;
 
     protected override async Task ExecuteAsync(
         CancellationToken stoppingToken
@@ -25,8 +30,27 @@ public sealed class Worker(
         {
             EnsureSafeProcessPriority();
 
+            StationCredential? credential =
+                _credentialStore.Load();
+
+            if (credential is null)
+            {
+                _logger.LogCritical(
+                    "Station Agent is not enrolled. "
+                    + "Run StationAgent.Service.exe --enroll "
+                    + "before starting the service."
+                );
+
+                return;
+            }
+
             _logger.LogInformation(
-                "Station Agent started. Backend={BackendBaseUrl}",
+                "Station Agent started. "
+                + "StationId={StationId} "
+                + "StationCode={StationCode} "
+                + "Backend={BackendBaseUrl}",
+                credential.StationId,
+                credential.StationCode,
                 _options.BackendBaseUrl
             );
 
@@ -44,7 +68,9 @@ public sealed class Worker(
             )
             {
                 _logger.LogDebug(
-                    "Station Agent service is running."
+                    "Station Agent service is running. "
+                    + "StationCode={StationCode}",
+                    credential.StationCode
                 );
             }
         }
@@ -63,8 +89,6 @@ public sealed class Worker(
                 "Station Agent stopped because of an unhandled error."
             );
 
-            // A non-zero exit lets the Service Control Manager
-            // apply the recovery policy configured by the installer.
             Environment.Exit(1);
         }
 

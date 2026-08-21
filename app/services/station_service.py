@@ -219,6 +219,29 @@ def rotate_station_agent_credential(
         db.rollback()
         raise
 
+def revoke_station_agent_credential(
+    db: Session,
+    *,
+    station_id: UUID,
+) -> None:
+    try:
+        station = db.scalar(
+            select(Station)
+            .where(Station.id == station_id)
+            .with_for_update()
+        )
+
+        if station is None:
+            raise StationNotFoundError
+
+        station.agent_key_id = None
+        station.agent_secret_hash = None
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
 
 def authenticate_station_agent(
     db: Session,

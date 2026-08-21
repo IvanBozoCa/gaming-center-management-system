@@ -2,6 +2,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Response,
     status,
 )
 from sqlalchemy.orm import Session
@@ -27,6 +28,7 @@ from app.services.station_service import (
     list_stations,
     update_station_status,
     rotate_station_agent_credential,
+    revoke_station_agent_credential,
 )
 
 router = APIRouter(
@@ -160,5 +162,31 @@ def rotate_agent_credential(
             status_code=(
                 status.HTTP_404_NOT_FOUND
             ),
+            detail="Station not found",
+        ) from exc
+
+@router.delete(
+    "/{station_id}/agent-credential",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+def revoke_agent_credential(
+    station_id: UUID,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    try:
+        revoke_station_agent_credential(
+            db,
+            station_id=station_id,
+        )
+
+        return Response(
+            status_code=status.HTTP_204_NO_CONTENT
+        )
+
+    except StationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Station not found",
         ) from exc
