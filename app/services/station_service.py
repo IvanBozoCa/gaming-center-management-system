@@ -242,7 +242,7 @@ def revoke_station_agent_credential(
     except Exception:
         db.rollback()
         raise
-    
+
 def authenticate_station_agent(
     db: Session,
     *,
