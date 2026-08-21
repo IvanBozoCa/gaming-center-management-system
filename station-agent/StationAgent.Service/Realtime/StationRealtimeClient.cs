@@ -6,12 +6,14 @@ using Microsoft.Extensions.Options;
 
 using StationAgent.Service.Configuration;
 using StationAgent.Service.Security;
+using StationAgent.Service.State;
 
 namespace StationAgent.Service.Realtime;
 
 public sealed class StationRealtimeClient(
     ILogger<StationRealtimeClient> logger,
-    IOptions<StationAgentOptions> options
+    IOptions<StationAgentOptions> options,
+    StationRuntimeState runtimeState
 )
 {
     private const int MaxServerMessageBytes =
@@ -24,6 +26,8 @@ public sealed class StationRealtimeClient(
     private readonly StationAgentOptions
         _options = options.Value;
 
+    private readonly StationRuntimeState
+        _runtimeState = runtimeState;
 
     public async Task RunAsync(
         StationCredential credential,
@@ -61,6 +65,12 @@ public sealed class StationRealtimeClient(
                     "Realtime connection failed. "
                     + "StationCode={StationCode}",
                     credential.StationCode
+                );
+            }
+            finally
+            {
+                _runtimeState.SetBackendConnected(
+                    false
                 );
             }
 
@@ -104,7 +114,6 @@ public sealed class StationRealtimeClient(
             }
         }
     }
-
 
     private async Task RunSessionAsync(
         StationCredential credential,
@@ -154,6 +163,9 @@ public sealed class StationRealtimeClient(
             + "HeartbeatInterval={HeartbeatInterval}s",
             credential.StationCode,
             connected.HeartbeatIntervalSeconds
+        );
+        _runtimeState.SetBackendConnected(
+            true
         );
 
         using CancellationTokenSource

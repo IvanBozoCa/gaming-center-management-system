@@ -3,6 +3,8 @@ using StationAgent.Service.Configuration;
 using StationAgent.Service.Enrollment;
 using StationAgent.Service.Security;
 using StationAgent.Service.Realtime;
+using StationAgent.Service.Ipc;
+using StationAgent.Service.State;
 
 bool enrollmentRequested =
     args.Any(
@@ -95,6 +97,14 @@ builder.Services.AddSingleton<
 
 builder.Services.AddSingleton<
     StationRealtimeClient
+>();
+
+builder.Services.AddHostedService<
+    StationIpcServer
+>();
+
+builder.Services.AddSingleton<
+    StationRuntimeState
 >();
 
 builder.Services.AddHostedService<Worker>();

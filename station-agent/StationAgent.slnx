@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="StationAgent.Contracts/StationAgent.Contracts.csproj" />
+  <Project Path="StationAgent.Service/StationAgent.Service.csproj" />
+  <Project Path="StationAgent.UI/StationAgent.UI.csproj" />
+</Solution>
