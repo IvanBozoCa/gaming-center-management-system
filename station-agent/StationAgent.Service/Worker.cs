@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Options;
 
 using StationAgent.Service.Configuration;
+using StationAgent.Service.Realtime;
 using StationAgent.Service.Security;
 
 namespace StationAgent.Service;
@@ -10,7 +11,8 @@ namespace StationAgent.Service;
 public sealed class Worker(
     ILogger<Worker> logger,
     IOptions<StationAgentOptions> options,
-    StationCredentialStore credentialStore
+    StationCredentialStore credentialStore,
+    StationRealtimeClient realtimeClient
 ) : BackgroundService
 {
     private readonly ILogger<Worker> _logger =
@@ -21,6 +23,10 @@ public sealed class Worker(
 
     private readonly StationCredentialStore
         _credentialStore = credentialStore;
+
+    private readonly StationRealtimeClient
+        _realtimeClient = realtimeClient;
+
 
     protected override async Task ExecuteAsync(
         CancellationToken stoppingToken
@@ -54,25 +60,10 @@ public sealed class Worker(
                 _options.BackendBaseUrl
             );
 
-            using PeriodicTimer timer =
-                new(
-                    TimeSpan.FromSeconds(
-                        _options.IdleLogIntervalSeconds
-                    )
-                );
-
-            while (
-                await timer.WaitForNextTickAsync(
-                    stoppingToken
-                )
-            )
-            {
-                _logger.LogDebug(
-                    "Station Agent service is running. "
-                    + "StationCode={StationCode}",
-                    credential.StationCode
-                );
-            }
+            await _realtimeClient.RunAsync(
+                credential,
+                stoppingToken
+            );
         }
         catch (OperationCanceledException)
             when (
@@ -86,7 +77,8 @@ public sealed class Worker(
         {
             _logger.LogCritical(
                 exception,
-                "Station Agent stopped because of an unhandled error."
+                "Station Agent stopped because "
+                + "of an unhandled error."
             );
 
             Environment.Exit(1);
@@ -96,6 +88,7 @@ public sealed class Worker(
             "Station Agent execution stopped."
         );
     }
+
 
     public override async Task StopAsync(
         CancellationToken cancellationToken
@@ -109,6 +102,7 @@ public sealed class Worker(
             cancellationToken
         );
     }
+
 
     private void EnsureSafeProcessPriority()
     {
@@ -139,7 +133,8 @@ public sealed class Worker(
             {
                 _logger.LogCritical(
                     exception,
-                    "Station Agent could not reduce unsafe process priority."
+                    "Station Agent could not reduce "
+                    + "unsafe process priority."
                 );
 
                 throw;
@@ -147,7 +142,8 @@ public sealed class Worker(
         }
 
         _logger.LogInformation(
-            "Station Agent process priority: {Priority}",
+            "Station Agent process priority: "
+            + "{Priority}",
             process.PriorityClass
         );
     }

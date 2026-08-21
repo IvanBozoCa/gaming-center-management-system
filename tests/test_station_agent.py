@@ -5,7 +5,17 @@ from app.core.agent_security import (
     parse_agent_token,
 )
 from app.models.station import Station
+from datetime import datetime, timezone
+import pytest
+from starlette.websockets import (
+    WebSocketDisconnect,
+)
+from unittest.mock import MagicMock
 
+from app.services.station_presence import (
+    StationPresenceRegistry,
+    station_presence_registry,
+)
 
 def _create_station(
     db_session,
@@ -23,6 +33,30 @@ def _create_station(
     db_session.refresh(station)
 
     return station
+
+
+def _create_agent_token(
+    client,
+    station,
+    user_factory,
+    auth_headers,
+) -> str:
+    admin = user_factory(
+        username="admin01",
+        role="ADMIN",
+    )
+
+    response = client.post(
+        (
+            f"/admin/stations/{station.id}/"
+            "agent-credential"
+        ),
+        headers=auth_headers(admin),
+    )
+
+    assert response.status_code == 200
+
+    return response.json()["agent_token"]
 
 
 def test_admin_can_generate_agent_credential(
@@ -411,3 +445,364 @@ def test_user_jwt_cannot_authenticate_as_station_agent(
     )
 
     assert response.status_code == 401
+
+
+def test_agent_websocket_requires_authentication(
+    client,
+):
+    with pytest.raises(
+        WebSocketDisconnect
+    ) as exception:
+        with client.websocket_connect(
+            "/agent/ws"
+        ):
+            pass
+
+    assert exception.value.code == 1008
+
+
+def test_user_jwt_cannot_authenticate_websocket(
+    client,
+    user_factory,
+    auth_headers,
+):
+    admin = user_factory(
+        username="admin01",
+        role="ADMIN",
+    )
+
+    with pytest.raises(
+        WebSocketDisconnect
+    ) as exception:
+        with client.websocket_connect(
+            "/agent/ws",
+            headers=auth_headers(admin),
+        ):
+            pass
+
+    assert exception.value.code == 1008
+
+
+def test_agent_websocket_accepts_heartbeat(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    station = _create_station(
+        db_session,
+        status="MAINTENANCE",
+    )
+
+    token = _create_agent_token(
+        client,
+        station,
+        user_factory,
+        auth_headers,
+    )
+
+    event_id = uuid4()
+
+    with client.websocket_connect(
+        "/agent/ws",
+        headers={
+            "Authorization": (
+                f"Bearer {token}"
+            ),
+        },
+    ) as websocket:
+        connected = (
+            websocket.receive_json()
+        )
+
+        assert (
+            connected["type"]
+            == "CONNECTED"
+        )
+
+        assert connected["version"] == 1
+
+        assert (
+            connected["data"]["station_id"]
+            == str(station.id)
+        )
+
+        websocket.send_json(
+            {
+                "version": 1,
+                "type": "HEARTBEAT",
+                "event_id": str(event_id),
+                "correlation_id": None,
+                "sent_at": (
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat()
+                ),
+            }
+        )
+
+        acknowledgement = (
+            websocket.receive_json()
+        )
+
+        assert (
+            acknowledgement["type"]
+            == "HEARTBEAT_ACK"
+        )
+
+        assert (
+            acknowledgement[
+                "correlation_id"
+            ]
+            == str(event_id)
+        )
+
+    db_session.expire_all()
+
+    stored_station = db_session.get(
+        Station,
+        station.id,
+    )
+
+    assert stored_station is not None
+
+    assert (
+        stored_station.status
+        == "MAINTENANCE"
+    )
+
+    assert (
+        stored_station.last_seen_at
+        is not None
+    )
+
+
+def test_agent_websocket_rejects_unknown_version(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    station = _create_station(
+        db_session
+    )
+
+    token = _create_agent_token(
+        client,
+        station,
+        user_factory,
+        auth_headers,
+    )
+
+    with client.websocket_connect(
+        "/agent/ws",
+        headers={
+            "Authorization": (
+                f"Bearer {token}"
+            ),
+        },
+    ) as websocket:
+        websocket.receive_json()
+
+        websocket.send_json(
+            {
+                "version": 999,
+                "type": "HEARTBEAT",
+                "event_id": str(
+                    uuid4()
+                ),
+                "sent_at": (
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat()
+                ),
+            }
+        )
+
+        response = (
+            websocket.receive_json()
+        )
+
+        assert response["type"] == "ERROR"
+
+        assert (
+            response["data"]["code"]
+            == "INVALID_MESSAGE"
+        )
+
+def test_agent_websocket_tracks_station_presence(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    station = _create_station(
+        db_session
+    )
+
+    token = _create_agent_token(
+        client,
+        station,
+        user_factory,
+        auth_headers,
+    )
+
+    before = (
+        station_presence_registry
+        .get_presence(station.id)
+    )
+
+    assert (
+        before.connection_status
+        == "OFFLINE"
+    )
+
+    with client.websocket_connect(
+        "/agent/ws",
+        headers={
+            "Authorization": (
+                f"Bearer {token}"
+            ),
+        },
+    ) as websocket:
+        websocket.receive_json()
+
+        connected = (
+            station_presence_registry
+            .get_presence(station.id)
+        )
+
+        assert (
+            connected.connection_status
+            == "CONNECTED"
+        )
+
+        assert (
+            connected.connected_at
+            is not None
+        )
+
+        assert (
+            connected.last_heartbeat_at
+            is not None
+        )
+
+    disconnected = (
+        station_presence_registry
+        .get_presence(station.id)
+    )
+
+    assert (
+        disconnected.connection_status
+        == "OFFLINE"
+    )
+
+
+def test_station_presence_records_heartbeat():
+    registry = StationPresenceRegistry()
+
+    station_id = uuid4()
+    websocket = MagicMock()
+
+    connection, _ = registry.register(
+        station_id,
+        websocket,
+    )
+
+    initial = registry.get_presence(
+        station_id
+    )
+
+    heartbeat_at = (
+        registry.record_heartbeat(
+            station_id,
+            connection.connection_id,
+        )
+    )
+
+    updated = registry.get_presence(
+        station_id
+    )
+
+    assert heartbeat_at is not None
+
+    assert (
+        updated.connection_status
+        == "CONNECTED"
+    )
+
+    assert (
+        updated.last_heartbeat_at
+        == heartbeat_at
+    )
+
+    assert (
+        updated.last_heartbeat_at
+        >= initial.last_heartbeat_at
+    )
+
+
+def test_old_connection_cannot_unregister_new_connection():
+    registry = StationPresenceRegistry()
+
+    station_id = uuid4()
+
+    first_websocket = MagicMock()
+    second_websocket = MagicMock()
+
+    first_connection, _ = (
+        registry.register(
+            station_id,
+            first_websocket,
+        )
+    )
+
+    second_connection, previous = (
+        registry.register(
+            station_id,
+            second_websocket,
+        )
+    )
+
+    assert previous is first_websocket
+
+    registry.unregister(
+        station_id,
+        first_connection.connection_id,
+    )
+
+    presence = registry.get_presence(
+        station_id
+    )
+
+    assert (
+        presence.connection_status
+        == "CONNECTED"
+    )
+
+    assert (
+        presence.connected_at
+        == second_connection.connected_at
+    )
+
+    assert (
+        registry.record_heartbeat(
+            station_id,
+            first_connection.connection_id,
+        )
+        is None
+    )
+
+    registry.unregister(
+        station_id,
+        second_connection.connection_id,
+    )
+
+    presence = registry.get_presence(
+        station_id
+    )
+
+    assert (
+        presence.connection_status
+        == "OFFLINE"
+    )

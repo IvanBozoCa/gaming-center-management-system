@@ -2,6 +2,7 @@ using StationAgent.Service;
 using StationAgent.Service.Configuration;
 using StationAgent.Service.Enrollment;
 using StationAgent.Service.Security;
+using StationAgent.Service.Realtime;
 
 bool enrollmentRequested =
     args.Any(
@@ -63,6 +64,25 @@ builder.Services
             options.IdleLogIntervalSeconds >= 10,
         "StationAgent:IdleLogIntervalSeconds must be at least 10 seconds."
     )
+        .Validate(
+        options =>
+            options.ReconnectInitialDelaySeconds
+                >= 1,
+        "StationAgent:ReconnectInitialDelaySeconds must be at least 1 second."
+    )
+    .Validate(
+        options =>
+            options.ReconnectMaxDelaySeconds
+                >= options
+                    .ReconnectInitialDelaySeconds,
+        "StationAgent:ReconnectMaxDelaySeconds must be greater than or equal to the initial delay."
+    )
+    .Validate(
+        options =>
+            options.ReconnectJitterMilliseconds
+                is >= 0 and <= 5000,
+        "StationAgent:ReconnectJitterMilliseconds must be between 0 and 5000."
+    )
     .ValidateOnStart();
 
 builder.Services.AddSingleton<
@@ -71,6 +91,10 @@ builder.Services.AddSingleton<
 
 builder.Services.AddSingleton<
     StationEnrollmentCommand
+>();
+
+builder.Services.AddSingleton<
+    StationRealtimeClient
 >();
 
 builder.Services.AddHostedService<Worker>();

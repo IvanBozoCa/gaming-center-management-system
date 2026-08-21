@@ -16,4 +16,22 @@ public sealed class StationAgentOptions
         get;
         init;
     } = 60;
+
+    public int ReconnectInitialDelaySeconds
+    {
+        get;
+        init;
+    } = 1;
+
+    public int ReconnectMaxDelaySeconds
+    {
+        get;
+        init;
+    } = 30;
+
+    public int ReconnectJitterMilliseconds
+    {
+        get;
+        init;
+    } = 500;
 }
