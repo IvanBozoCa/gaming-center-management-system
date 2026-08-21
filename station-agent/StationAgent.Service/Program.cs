@@ -1,8 +1,32 @@
 using StationAgent.Service;
 using StationAgent.Service.Configuration;
+using StationAgent.Service.Enrollment;
+using StationAgent.Service.Security;
+
+bool enrollmentRequested =
+    args.Any(
+        argument =>
+            string.Equals(
+                argument,
+                "--enroll",
+                StringComparison.OrdinalIgnoreCase
+            )
+    );
+
+string[] hostArguments =
+    args.Where(
+        argument =>
+            !string.Equals(
+                argument,
+                "--enroll",
+                StringComparison.OrdinalIgnoreCase
+            )
+    ).ToArray();
 
 HostApplicationBuilder builder =
-    Host.CreateApplicationBuilder(args);
+    Host.CreateApplicationBuilder(
+        hostArguments
+    );
 
 builder.Services.AddWindowsService(
     options =>
@@ -27,8 +51,10 @@ builder.Services
                 out Uri? backendUri
             )
             && (
-                backendUri.Scheme == Uri.UriSchemeHttp
-                || backendUri.Scheme == Uri.UriSchemeHttps
+                backendUri.Scheme
+                    == Uri.UriSchemeHttp
+                || backendUri.Scheme
+                    == Uri.UriSchemeHttps
             ),
         "StationAgent:BackendBaseUrl must be an absolute HTTP or HTTPS URL."
     )
@@ -39,8 +65,30 @@ builder.Services
     )
     .ValidateOnStart();
 
+builder.Services.AddSingleton<
+    StationCredentialStore
+>();
+
+builder.Services.AddSingleton<
+    StationEnrollmentCommand
+>();
+
 builder.Services.AddHostedService<Worker>();
 
-IHost host = builder.Build();
+using IHost host = builder.Build();
 
-host.Run();
+if (enrollmentRequested)
+{
+    StationEnrollmentCommand command =
+        host.Services.GetRequiredService<
+            StationEnrollmentCommand
+        >();
+
+    return await command.RunAsync(
+        CancellationToken.None
+    );
+}
+
+await host.RunAsync();
+
+return 0;
