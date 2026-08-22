@@ -432,6 +432,103 @@ public sealed class StationRealtimeClient(
 
                     break;
 
+                case AgentProtocol
+                    .SessionStartType:
+
+                case AgentProtocol
+                    .SessionExtendType:
+                    {
+                        AgentSessionData? session =
+                            message.Data.Deserialize<
+                                AgentSessionData
+                            >(
+                                AgentProtocol.JsonOptions
+                            );
+
+                        StationSessionSnapshot snapshot =
+                            MapActiveSession(
+                                session
+                            )
+                            ?? throw new InvalidDataException(
+                                "Session event does not "
+                                + "contain an active session."
+                            );
+
+                        _runtimeState.SetActiveSession(
+                            snapshot
+                        );
+
+                        _logger.LogInformation(
+                            "Station session synchronized. "
+                            + "Type={MessageType} "
+                            + "SessionId={SessionId} "
+                            + "SessionType={SessionType} "
+                            + "RemainingSeconds={RemainingSeconds}",
+                            message.Type,
+                            snapshot.SessionId,
+                            snapshot.SessionType,
+                            snapshot.RemainingSeconds
+                        );
+
+                        break;
+                    }
+
+
+                case AgentProtocol
+                    .SessionFinishType:
+                    {
+                        SessionFinishData? finished =
+                            message.Data.Deserialize<
+                                SessionFinishData
+                            >(
+                                AgentProtocol.JsonOptions
+                            );
+
+                        if (
+                            finished is null
+                            || finished.SessionId
+                                == Guid.Empty
+                            || finished.SessionType
+                                is not (
+                                    "REGISTERED"
+                                    or "GUEST"
+                                )
+                        )
+                        {
+                            throw new InvalidDataException(
+                                "Invalid SESSION_FINISH "
+                                + "message received."
+                            );
+                        }
+
+                        bool applied =
+                            _runtimeState.FinishSession(
+                                finished.SessionId
+                            );
+
+                        if (applied)
+                        {
+                            _logger.LogInformation(
+                                "Station session finished. "
+                                + "SessionId={SessionId} "
+                                + "SessionType={SessionType}",
+                                finished.SessionId,
+                                finished.SessionType
+                            );
+                        }
+                        else
+                        {
+                            _logger.LogDebug(
+                                "SESSION_FINISH ignored because "
+                                + "the session is no longer active. "
+                                + "SessionId={SessionId}",
+                                finished.SessionId
+                            );
+                        }
+
+                        break;
+                    }
+
 
                 case AgentProtocol.ErrorType:
                     ServerErrorData? error =

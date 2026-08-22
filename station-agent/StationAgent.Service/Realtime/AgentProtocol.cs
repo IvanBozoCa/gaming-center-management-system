@@ -15,16 +15,24 @@ internal static class AgentProtocol
     public const string HeartbeatAckType =
         "HEARTBEAT_ACK";
 
+    public const string SessionStartType =
+        "SESSION_START";
+
+    public const string SessionExtendType =
+        "SESSION_EXTEND";
+
+    public const string SessionFinishType =
+        "SESSION_FINISH";
+
     public const string ErrorType =
         "ERROR";
 
     public static JsonSerializerOptions
-        JsonOptions
-    { get; } = new()
-    {
-        PropertyNamingPolicy =
+        JsonOptions { get; } = new()
+        {
+            PropertyNamingPolicy =
                 JsonNamingPolicy.SnakeCaseLower,
-    };
+        };
 }
 
 
@@ -54,6 +62,7 @@ internal sealed record ConnectedMessageData(
     AgentSessionData? ActiveSession
 );
 
+
 internal sealed record AgentSessionData(
     Guid SessionId,
     string SessionType,
@@ -64,6 +73,14 @@ internal sealed record AgentSessionData(
     int RemainingSeconds,
     string TimeState
 );
+
+
+internal sealed record SessionFinishData(
+    Guid SessionId,
+    string SessionType,
+    DateTimeOffset EndedAt
+);
+
 
 internal sealed record ServerErrorData(
     string? Code

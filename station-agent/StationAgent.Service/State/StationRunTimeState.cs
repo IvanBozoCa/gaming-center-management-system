@@ -97,6 +97,36 @@ public sealed class StationRuntimeState
         );
     }
 
+    public bool FinishSession(
+        Guid sessionId
+)
+    {
+        StationRuntimeSnapshot snapshot;
+
+        lock (_sync)
+        {
+            if (
+                _activeSession is null
+                || _activeSession.SessionId
+                    != sessionId
+            )
+            {
+                return false;
+            }
+
+            _activeSession = null;
+
+            snapshot =
+                CreateSnapshot();
+        }
+
+        Changed?.Invoke(
+            snapshot
+        );
+
+        return true;
+    }
+
     private StationRuntimeSnapshot
         CreateSnapshot()
     {
