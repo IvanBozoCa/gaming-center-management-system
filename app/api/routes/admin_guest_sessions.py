@@ -5,6 +5,10 @@ from fastapi import (
     Query,
     status,
 )
+from app.services.station_session_events import (
+    publish_active_session_event,
+    publish_session_finish_event,
+)
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app.api.deps import (
@@ -59,13 +63,22 @@ def create_guest_session(
     _admin: User = Depends(require_admin),
 ):
     try:
-        return start_guest_session(
+        result = start_guest_session(
             db,
             station_id=data.station_id,
             authorized_seconds=(
                 data.authorized_seconds
             ),
+)
+
+        publish_active_session_event(
+            db,
+            station_id=result.station_id,
+            session_id=result.session_id,
+            event_type="SESSION_START",
         )
+
+        return result
 
     except InvalidAuthorizedTimeError as exc:
         raise HTTPException(
@@ -124,10 +137,19 @@ def finish_guest_usage_session(
     _admin: User = Depends(require_admin),
 ):
     try:
-        return finish_guest_session(
+        result = finish_guest_session(
             db,
             session_id=session_id,
         )
+
+        publish_session_finish_event(
+            station_id=result.station_id,
+            session_id=result.session_id,
+            session_type="GUEST",
+            ended_at=result.ended_at,
+        )
+
+        return result
 
     except GuestSessionNotFoundError as exc:
         raise HTTPException(

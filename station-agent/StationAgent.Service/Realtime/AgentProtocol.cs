@@ -19,11 +19,12 @@ internal static class AgentProtocol
         "ERROR";
 
     public static JsonSerializerOptions
-        JsonOptions { get; } = new()
-        {
-            PropertyNamingPolicy =
+        JsonOptions
+    { get; } = new()
+    {
+        PropertyNamingPolicy =
                 JsonNamingPolicy.SnakeCaseLower,
-        };
+    };
 }
 
 
@@ -49,9 +50,20 @@ internal sealed record ServerAgentMessage(
 internal sealed record ConnectedMessageData(
     Guid StationId,
     string StationCode,
-    int HeartbeatIntervalSeconds
+    int HeartbeatIntervalSeconds,
+    AgentSessionData? ActiveSession
 );
 
+internal sealed record AgentSessionData(
+    Guid SessionId,
+    string SessionType,
+    int AuthorizedSeconds,
+    DateTimeOffset StartedAt,
+    DateTimeOffset ServerNow,
+    int ElapsedSeconds,
+    int RemainingSeconds,
+    string TimeState
+);
 
 internal sealed record ServerErrorData(
     string? Code

@@ -156,6 +156,11 @@ public sealed class StationRealtimeClient(
                 credential,
                 stoppingToken
             );
+        _runtimeState.SetActiveSession(
+            MapActiveSession(
+                connected.ActiveSession
+            )
+        );
 
         _logger.LogInformation(
             "Station realtime session established. "
@@ -545,6 +550,51 @@ public sealed class StationRealtimeClient(
                 );
             }
         }
+    }
+    private static StationSessionSnapshot?
+    MapActiveSession(
+        AgentSessionData? session
+    )
+    {
+        if (session is null)
+        {
+            return null;
+        }
+
+        if (
+            session.SessionId
+                == Guid.Empty
+            || session.AuthorizedSeconds <= 0
+            || session.ElapsedSeconds < 0
+            || session.RemainingSeconds < 0
+            || session.SessionType
+                is not (
+                    "REGISTERED"
+                    or "GUEST"
+                )
+            || session.TimeState
+                is not (
+                    "RUNNING"
+                    or "EXHAUSTED"
+                )
+        )
+        {
+            throw new InvalidDataException(
+                "Invalid active session "
+                + "received from backend."
+            );
+        }
+
+        return new StationSessionSnapshot(
+            session.SessionId,
+            session.SessionType,
+            session.AuthorizedSeconds,
+            session.StartedAt,
+            session.ServerNow,
+            session.ElapsedSeconds,
+            session.RemainingSeconds,
+            session.TimeState
+        );
     }
 
 

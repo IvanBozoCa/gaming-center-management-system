@@ -31,6 +31,9 @@ class ServerAgentMessage(BaseModel):
     type: Literal[
         "CONNECTED",
         "HEARTBEAT_ACK",
+        "SESSION_START",
+        "SESSION_EXTEND",
+        "SESSION_FINISH",
         "ERROR",
     ]
 

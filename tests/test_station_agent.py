@@ -10,6 +10,10 @@ import pytest
 from starlette.websockets import (
     WebSocketDisconnect,
 )
+from app.services.usage_session_service import (
+    start_guest_session,
+    start_registered_customer_session,
+)
 from unittest.mock import MagicMock
 
 from app.services.station_presence import (
@@ -806,3 +810,254 @@ def test_old_connection_cannot_unregister_new_connection():
         presence.connection_status
         == "OFFLINE"
     )
+
+
+def test_agent_connected_reports_no_active_session(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    station = _create_station(
+        db_session
+    )
+
+    token = _create_agent_token(
+        client,
+        station,
+        user_factory,
+        auth_headers,
+    )
+
+    with client.websocket_connect(
+        "/agent/ws",
+        headers={
+            "Authorization": (
+                f"Bearer {token}"
+            ),
+        },
+    ) as websocket:
+        connected = (
+            websocket.receive_json()
+        )
+
+        assert (
+            connected["type"]
+            == "CONNECTED"
+        )
+
+        assert (
+            connected["data"][
+                "active_session"
+            ]
+            is None
+        )
+
+def test_agent_connected_reports_registered_session(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    admin = user_factory(
+        username="admin01",
+        role="ADMIN",
+    )
+
+    customer = user_factory(
+        username="cliente01",
+        available_seconds=7200,
+    )
+
+    station = _create_station(
+        db_session
+    )
+
+    credential_response = client.post(
+        (
+            f"/admin/stations/"
+            f"{station.id}/"
+            "agent-credential"
+        ),
+        headers=auth_headers(admin),
+    )
+
+    assert (
+        credential_response.status_code
+        == 200
+    )
+
+    token = (
+        credential_response.json()[
+            "agent_token"
+        ]
+    )
+
+    session = (
+        start_registered_customer_session(
+            db_session,
+            station_id=station.id,
+            customer_id=customer.id,
+            authorized_seconds=3600,
+            actor_user_id=admin.id,
+        )
+    )
+
+    with client.websocket_connect(
+        "/agent/ws",
+        headers={
+            "Authorization": (
+                f"Bearer {token}"
+            ),
+        },
+    ) as websocket:
+        connected = (
+            websocket.receive_json()
+        )
+
+        active_session = (
+            connected["data"][
+                "active_session"
+            ]
+        )
+
+        assert active_session is not None
+
+        assert (
+            active_session["session_id"]
+            == str(session.session_id)
+        )
+
+        assert (
+            active_session["session_type"]
+            == "REGISTERED"
+        )
+
+        assert (
+            active_session[
+                "authorized_seconds"
+            ]
+            == 3600
+        )
+
+        assert (
+            active_session[
+                "elapsed_seconds"
+            ]
+            >= 0
+        )
+
+        assert (
+            0
+            <= active_session[
+                "remaining_seconds"
+            ]
+            <= 3600
+        )
+
+        assert (
+            active_session["time_state"]
+            == "RUNNING"
+        )
+
+        assert (
+            active_session["started_at"]
+            is not None
+        )
+
+        assert (
+            active_session["server_now"]
+            is not None
+        )
+
+def test_agent_connected_reports_guest_session(
+    client,
+    db_session,
+    user_factory,
+    auth_headers,
+):
+    station = _create_station(
+        db_session
+    )
+
+    token = _create_agent_token(
+        client,
+        station,
+        user_factory,
+        auth_headers,
+    )
+
+    session = start_guest_session(
+        db_session,
+        station_id=station.id,
+        authorized_seconds=1800,
+    )
+
+    with client.websocket_connect(
+        "/agent/ws",
+        headers={
+            "Authorization": (
+                f"Bearer {token}"
+            ),
+        },
+    ) as websocket:
+        connected = (
+            websocket.receive_json()
+        )
+
+        active_session = (
+            connected["data"][
+                "active_session"
+            ]
+        )
+
+        assert active_session is not None
+
+        assert (
+            active_session["session_id"]
+            == str(session.session_id)
+        )
+
+        assert (
+            active_session["session_type"]
+            == "GUEST"
+        )
+
+        assert (
+            active_session[
+                "authorized_seconds"
+            ]
+            == 1800
+        )
+
+        assert (
+            active_session[
+                "elapsed_seconds"
+            ]
+            >= 0
+        )
+
+        assert (
+            0
+            <= active_session[
+                "remaining_seconds"
+            ]
+            <= 1800
+        )
+
+        assert (
+            active_session["time_state"]
+            == "RUNNING"
+        )
+
+        assert (
+            active_session["started_at"]
+            is not None
+        )
+
+        assert (
+            active_session["server_now"]
+            is not None
+        )
+
+

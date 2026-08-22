@@ -1,10 +1,16 @@
+import asyncio
+import logging
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import WebSocket
+
+
+logger = logging.getLogger(__name__)
 
 
 StationConnectionStatus = Literal[
@@ -27,8 +33,15 @@ class StationPresenceSnapshot:
 class StationConnection:
     connection_id: UUID
     websocket: WebSocket
+
     connected_at: datetime
     last_heartbeat_at: datetime
+
+    event_loop: (
+        asyncio.AbstractEventLoop | None
+    ) = None
+
+    send_lock: asyncio.Lock | None = None
 
 
 class StationPresenceRegistry:
@@ -44,6 +57,10 @@ class StationPresenceRegistry:
         self,
         station_id: UUID,
         websocket: WebSocket,
+        *,
+        event_loop: (
+            asyncio.AbstractEventLoop | None
+        ) = None,
     ) -> tuple[
         StationConnection,
         WebSocket | None,
@@ -57,11 +74,15 @@ class StationPresenceRegistry:
             websocket=websocket,
             connected_at=server_now,
             last_heartbeat_at=server_now,
+            event_loop=event_loop,
+            send_lock=asyncio.Lock(),
         )
 
         with self._lock:
-            previous = self._connections.get(
-                station_id
+            previous = (
+                self._connections.get(
+                    station_id
+                )
             )
 
             self._connections[
@@ -129,6 +150,101 @@ class StationPresenceRegistry:
                     station_id,
                     None,
                 )
+
+    async def send_if_current(
+        self,
+        station_id: UUID,
+        connection_id: UUID,
+        payload: dict[str, Any],
+    ) -> bool:
+        with self._lock:
+            connection = (
+                self._connections.get(
+                    station_id
+                )
+            )
+
+        if (
+            connection is None
+            or connection.connection_id
+            != connection_id
+            or connection.send_lock is None
+        ):
+            return False
+
+        async with connection.send_lock:
+            with self._lock:
+                current = (
+                    self._connections.get(
+                        station_id
+                    )
+                )
+
+            if (
+                current is None
+                or current.connection_id
+                != connection_id
+            ):
+                return False
+
+            await connection.websocket.send_json(
+                payload
+            )
+
+        return True
+
+    def publish(
+        self,
+        station_id: UUID,
+        payload: dict[str, Any],
+    ) -> bool:
+        with self._lock:
+            connection = (
+                self._connections.get(
+                    station_id
+                )
+            )
+
+        if (
+            connection is None
+            or connection.event_loop is None
+            or connection.event_loop.is_closed()
+        ):
+            return False
+
+        try:
+            future = (
+                asyncio.run_coroutine_threadsafe(
+                    self.send_if_current(
+                        station_id,
+                        connection.connection_id,
+                        payload,
+                    ),
+                    connection.event_loop,
+                )
+            )
+
+        except RuntimeError:
+            return False
+
+        def consume_result(
+            completed_future,
+        ) -> None:
+            try:
+                completed_future.result()
+
+            except Exception:
+                logger.debug(
+                    "Could not publish realtime "
+                    "station message.",
+                    exc_info=True,
+                )
+
+        future.add_done_callback(
+            consume_result
+        )
+
+        return True
 
     def get_presence(
         self,

@@ -1,47 +1,108 @@
 namespace StationAgent.Service.State;
 
+public sealed record StationSessionSnapshot(
+    Guid SessionId,
+    string SessionType,
+    int AuthorizedSeconds,
+    DateTimeOffset StartedAt,
+    DateTimeOffset ServerNow,
+    int ElapsedSeconds,
+    int RemainingSeconds,
+    string TimeState
+);
+
 public sealed record StationRuntimeSnapshot(
-    bool BackendConnected
+    bool BackendConnected,
+    StationSessionSnapshot? ActiveSession
 );
 
 public sealed class StationRuntimeState
 {
-    private int _backendConnected;
+    private readonly object _sync =
+        new();
+
+    private bool _backendConnected;
+
+    private StationSessionSnapshot?
+        _activeSession;
 
     public event Action<StationRuntimeSnapshot>?
         Changed;
 
-    public StationRuntimeSnapshot GetSnapshot()
+    public StationRuntimeSnapshot
+        GetSnapshot()
     {
-        return new StationRuntimeSnapshot(
-            Volatile.Read(
-                ref _backendConnected
-            ) == 1
-        );
+        lock (_sync)
+        {
+            return CreateSnapshot();
+        }
     }
 
     public void SetBackendConnected(
         bool connected
     )
     {
-        int newValue =
-            connected ? 1 : 0;
+        StationRuntimeSnapshot snapshot;
 
-        int previousValue =
-            Interlocked.Exchange(
-                ref _backendConnected,
-                newValue
-            );
-
-        if (previousValue == newValue)
+        lock (_sync)
         {
-            return;
+            if (
+                _backendConnected
+                    == connected
+            )
+            {
+                return;
+            }
+
+            _backendConnected =
+                connected;
+
+            snapshot =
+                CreateSnapshot();
         }
 
         Changed?.Invoke(
-            new StationRuntimeSnapshot(
-                connected
+            snapshot
+        );
+    }
+
+    public void SetActiveSession(
+        StationSessionSnapshot?
+            activeSession
+    )
+    {
+        StationRuntimeSnapshot snapshot;
+
+        lock (_sync)
+        {
+            if (
+                Equals(
+                    _activeSession,
+                    activeSession
+                )
             )
+            {
+                return;
+            }
+
+            _activeSession =
+                activeSession;
+
+            snapshot =
+                CreateSnapshot();
+        }
+
+        Changed?.Invoke(
+            snapshot
+        );
+    }
+
+    private StationRuntimeSnapshot
+        CreateSnapshot()
+    {
+        return new StationRuntimeSnapshot(
+            _backendConnected,
+            _activeSession
         );
     }
 }

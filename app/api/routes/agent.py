@@ -1,5 +1,6 @@
 import asyncio
-
+from app.services.station_session_sync import (
+    get_active_station_session_snapshot,)
 from fastapi import (
     APIRouter,
     Depends,
@@ -8,6 +9,7 @@ from fastapi import (
     WebSocketException,
     status,
 )
+from uuid import UUID
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -110,18 +112,27 @@ def authenticate_websocket_station(
 
 
 async def send_agent_message(
-    websocket: WebSocket,
+    station_id: UUID,
+    connection,
     message: ServerAgentMessage,
 ) -> None:
-    await websocket.send_json(
-        message.model_dump(
-            mode="json",
+    sent = await (
+        station_presence_registry
+        .send_if_current(
+            station_id,
+            connection.connection_id,
+            message.model_dump(
+                mode="json",
+            ),
         )
     )
 
+    if not sent:
+        raise WebSocketDisconnect
+
 
 @router.websocket("/ws")
-async def station_websocket(
+async def station_websocket(    
     websocket: WebSocket,
     db: Session = Depends(get_db),
 ):
@@ -136,11 +147,55 @@ async def station_websocket(
         station_presence_registry.register(
             station.id,
             websocket,
+            event_loop=(
+                asyncio.get_running_loop()
+            ),
         )
     )
+    active_session = (
+    get_active_station_session_snapshot(
+        db,
+        station_id=station.id,
+    )
+)
+
+    active_session_data = (
+        None
+        if active_session is None
+        else {
+            "session_id": str(
+                active_session.session_id
+            ),
+            "session_type": (
+                active_session.session_type
+            ),
+            "authorized_seconds": (
+                active_session
+                .authorized_seconds
+            ),
+            "started_at": (
+                active_session.started_at
+            ),
+            "server_now": (
+                active_session.server_now
+            ),
+            "elapsed_seconds": (
+                active_session.elapsed_seconds
+            ),
+            "remaining_seconds": (
+                active_session
+                .remaining_seconds
+            ),
+            "time_state": (
+                active_session.time_state
+            ),
+        }
+    )
+    
 
     await send_agent_message(
-        websocket,
+        station.id,
+        connection,
         ServerAgentMessage(
             type="CONNECTED",
             data={
@@ -149,6 +204,9 @@ async def station_websocket(
                 "heartbeat_interval_seconds": (
                     settings
                     .agent_heartbeat_interval_seconds
+                ),
+                "active_session": (
+                    active_session_data
                 ),
             },
         ),
@@ -224,8 +282,9 @@ async def station_websocket(
                 ValueError,
             ):
                 await send_agent_message(
-                    websocket,
-                    ServerAgentMessage(
+                        station.id,
+                        connection,
+                        ServerAgentMessage(
                         type="ERROR",
                         data={
                             "code": (
@@ -259,7 +318,8 @@ async def station_websocket(
             )
 
             await send_agent_message(
-                websocket,
+                station.id,
+                connection,
                 ServerAgentMessage(
                     type="HEARTBEAT_ACK",
                     correlation_id=(

@@ -7,6 +7,10 @@ from fastapi import (
     Query,
     status,
 )
+from app.services.station_session_events import (
+    publish_active_session_event,
+    publish_session_finish_event,
+)
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -65,15 +69,24 @@ def start_session(
     admin: User = Depends(require_admin),
 ):
     try:
-        return start_registered_customer_session(
-            db,
-            station_id=data.station_id,
-            customer_id=data.customer_id,
-            authorized_seconds=(
-                data.authorized_seconds
-            ),
-            actor_user_id=admin.id,
+        result = (
+            start_registered_customer_session(
+                db,
+                station_id=data.station_id,
+                customer_id=data.customer_id,
+                authorized_seconds=(
+                    data.authorized_seconds
+                ),
+                actor_user_id=admin.id,
+            )
         )
+        publish_active_session_event(
+            db,
+            station_id=result.station_id,
+            session_id=result.session_id,
+            event_type="SESSION_START",
+        )
+        return result
 
     except InvalidAuthorizedTimeError as exc:
         raise HTTPException(
@@ -155,11 +168,22 @@ def finish_session(
     admin: User = Depends(require_admin),
 ):
     try:
-        return finish_registered_customer_session(
+        result = (
+        finish_registered_customer_session(
             db,
             session_id=session_id,
             actor_user_id=admin.id,
         )
+    )
+
+        publish_session_finish_event(
+            station_id=result.station_id,
+            session_id=result.session_id,
+            session_type="REGISTERED",
+            ended_at=result.ended_at,
+    )
+
+        return result
 
     except UsageSessionNotFoundError as exc:
         raise HTTPException(
@@ -273,14 +297,24 @@ def extend_session(
     admin: User = Depends(require_admin),
 ):
     try:
-        return extend_registered_customer_session(
-            db,
-            session_id=session_id,
-            additional_seconds=(
-                data.additional_seconds
-            ),
-            actor_user_id=admin.id,
+        result = (
+            extend_registered_customer_session(
+                db,
+                session_id=session_id,
+                additional_seconds=(
+                    data.additional_seconds
+                ),
+                actor_user_id=admin.id,
+            )
         )
+        publish_active_session_event(
+            db,
+            station_id=result.station_id,
+            session_id=result.session_id,
+            event_type="SESSION_EXTEND",
+        )
+
+        return result
 
     except InvalidAdditionalTimeError as exc:
         raise HTTPException(
