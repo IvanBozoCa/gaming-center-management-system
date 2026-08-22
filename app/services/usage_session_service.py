@@ -116,6 +116,9 @@ class GuestSessionNotFoundError(Exception):
 class GuestSessionFinishConflictError(Exception):
     pass
 
+class GuestSessionExtensionConflictError(Exception):
+    pass
+
 
 @dataclass(frozen=True)
 class SessionStartResult:
@@ -139,6 +142,20 @@ class GuestSessionStartResult:
     session_type: str
     session_status: str
     station_status: str
+
+    started_at: datetime
+
+
+@dataclass(frozen=True)
+class GuestSessionExtensionResult:
+    session_id: UUID
+    station_id: UUID
+
+    additional_seconds: int
+    authorized_seconds: int
+
+    session_type: str
+    session_status: str
 
     started_at: datetime
     
@@ -1198,6 +1215,84 @@ class GuestSessionFinishResult:
     started_at: datetime
     ended_at: datetime
     
+def extend_guest_session(
+    db: Session,
+    *,
+    session_id: UUID,
+    additional_seconds: int,
+) -> GuestSessionExtensionResult:
+    if additional_seconds <= 0:
+        raise InvalidAdditionalTimeError
+
+    try:
+        usage_session = db.scalar(
+            select(UsageSession)
+            .where(
+                UsageSession.id
+                == session_id,
+                UsageSession.session_type
+                == "GUEST",
+            )
+            .with_for_update()
+        )
+
+        if usage_session is None:
+            raise GuestSessionNotFoundError
+
+        if usage_session.status != "ACTIVE":
+            raise UsageSessionAlreadyFinishedError
+
+        usage_session.authorized_seconds += (
+            additional_seconds
+        )
+
+        db.flush()
+        db.refresh(
+            usage_session
+        )
+
+        result = (
+            GuestSessionExtensionResult(
+                session_id=(
+                    usage_session.id
+                ),
+                station_id=(
+                    usage_session.station_id
+                ),
+                additional_seconds=(
+                    additional_seconds
+                ),
+                authorized_seconds=(
+                    usage_session
+                    .authorized_seconds
+                ),
+                session_type=(
+                    usage_session.session_type
+                ),
+                session_status=(
+                    usage_session.status
+                ),
+                started_at=(
+                    usage_session.started_at
+                ),
+            )
+        )
+
+        db.commit()
+
+        return result
+
+    except IntegrityError as exc:
+        db.rollback()
+
+        raise (
+            GuestSessionExtensionConflictError
+        ) from exc
+
+    except Exception:
+        db.rollback()
+        raise
+
     
 def finish_guest_session(
     db: Session,

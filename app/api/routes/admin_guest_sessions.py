@@ -22,6 +22,8 @@ from app.schemas.usage_session import (
     ActiveGuestSessionResponse,
     GuestSessionFinishResponse,
     FinishedGuestSessionHistoryResponse,
+    SessionExtensionCreate,
+    GuestSessionExtensionResponse,
 )
 from app.services.usage_session_service import (
     GuestSessionStartConflictError,
@@ -36,6 +38,9 @@ from app.services.usage_session_service import (
     UsageSessionAlreadyFinishedError,
     finish_guest_session,
     list_finished_guest_sessions,
+    InvalidAdditionalTimeError,
+    GuestSessionExtensionConflictError,
+    extend_guest_session,
 )
 
 
@@ -178,6 +183,88 @@ def finish_guest_usage_session(
         ) from exc
         
 
+@router.post(
+    "/{session_id}/extend",
+    response_model=(
+        GuestSessionExtensionResponse
+    ),
+    status_code=status.HTTP_200_OK,
+    summary=(
+        "Extender sesión prepago "
+        "de invitado"
+    ),
+)
+def extend_guest_usage_session(
+    session_id: UUID,
+    data: SessionExtensionCreate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(
+        require_admin
+    ),
+):
+    try:
+        result = extend_guest_session(
+            db,
+            session_id=session_id,
+            additional_seconds=(
+                data.additional_seconds
+            ),
+        )
+
+        publish_active_session_event(
+            db,
+            station_id=result.station_id,
+            session_id=result.session_id,
+            event_type="SESSION_EXTEND",
+        )
+
+        return result
+
+    except InvalidAdditionalTimeError as exc:
+        raise HTTPException(
+            status_code=(
+                status
+                .HTTP_422_UNPROCESSABLE_ENTITY
+            ),
+            detail=(
+                "Additional time must be "
+                "greater than zero"
+            ),
+        ) from exc
+
+    except GuestSessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "Guest session not found"
+            ),
+        ) from exc
+
+    except (
+        UsageSessionAlreadyFinishedError
+    ) as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=(
+                "Guest session is "
+                "already finished"
+            ),
+        ) from exc
+
+    except (GuestSessionExtensionConflictError) as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=(
+                "Guest session extension "
+                "conflict"
+            ),
+        ) from exc
 
 @router.get(
     "/active",

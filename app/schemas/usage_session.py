@@ -201,7 +201,28 @@ class GuestSessionStartResponse(BaseModel):
     station_status: Literal["IN_USE"]
 
     started_at: datetime
-    
+
+
+class GuestSessionExtensionResponse(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+    session_id: UUID
+    station_id: UUID
+
+    additional_seconds: int = Field(
+        gt=0,
+    )
+
+    authorized_seconds: int = Field(
+        gt=0,
+    )
+
+    session_type: Literal["GUEST"]
+    session_status: Literal["ACTIVE"]
+
+    started_at: datetime
 
 class ActiveGuestSessionResponse(BaseModel):
     model_config = ConfigDict(
